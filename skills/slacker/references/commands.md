@@ -13,6 +13,32 @@ Run `slackers --help` (or `slackers <command> --help`) for the full option list.
 - `slackers auth set-default <workspace-url>`
 - `slackers auth remove <workspace-url>`
 
+## Channels
+
+- `slackers channel list`
+  - List all channels/conversations in the workspace
+  - Options:
+    - `--workspace <url>` (required when you have multiple workspaces)
+    - `--types <type>` repeatable (public_channel, private_channel, mpim, im)
+    - `--exclude-archived` (default: true)
+    - `--limit <n>` (default `200`)
+
+- `slackers channel get <#channel|channel|C...>`
+  - Get detailed information about a specific channel
+  - Options:
+    - `--workspace <url>` (required when using channel name across multiple workspaces)
+    - `--include-num-members` (include member count in response)
+
+- `slackers channel join <#channel|channel|C...>`
+  - Join a channel
+  - Options:
+    - `--workspace <url>` (required when using channel name across multiple workspaces)
+
+- `slackers channel leave <#channel|channel|C...>`
+  - Leave a channel
+  - Options:
+    - `--workspace <url>` (required when using channel name across multiple workspaces)
+
 ## Messages / threads
 
 - `slackers message get <target>`

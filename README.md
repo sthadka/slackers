@@ -33,6 +33,13 @@ slackers is a full-featured Slack CLI that provides complete workspace managemen
 - Get user details by ID or name
 - Filter active users and bots
 
+### Channel Discovery & Management
+- List all channels with type filtering (public, private, DMs, multi-party DMs)
+- Get detailed channel information (topic, purpose, member count)
+- Join and leave channels programmatically
+- Support for both channel IDs and names with auto-resolution
+- Pagination for workspaces with many channels
+
 ### Authentication
 - Multi-workspace credential management
 - Standard (xoxb/xoxp) and browser (xoxc/xoxd) token support
@@ -101,6 +108,12 @@ slackers message send "#general" "Hello from slackers!"
 Search messages:
 ```bash
 slackers search messages "error" --channel "#logs" --after 2024-01-01
+```
+
+List and join channels:
+```bash
+slackers channel list --types public_channel
+slackers channel join "#random"
 ```
 
 Get canvas document:
@@ -174,6 +187,23 @@ slackers canvas get <url-or-id>               # Get canvas as Markdown
 slackers user list                            # List all users
 slackers user get <identifier>                # Get user details
 ```
+
+### Channels
+
+```bash
+slackers channel list                         # List all channels
+slackers channel get <channel>                # Get channel info
+slackers channel join <channel>               # Join a channel
+slackers channel leave <channel>              # Leave a channel
+```
+
+Channel options:
+- `--types` - Filter by type (public_channel, private_channel, mpim, im)
+- `--exclude-archived` - Exclude archived channels (default: true)
+- `--include-num-members` - Include member count in response
+- `--limit` - Maximum channels to return (default: 200)
+
+**Performance tip:** Use channel IDs (e.g., `C0123456789`) instead of names for faster operations. Get IDs from `channel list` first.
 
 ## Development
 

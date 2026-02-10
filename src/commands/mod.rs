@@ -1,5 +1,6 @@
 mod auth;
 mod canvas;
+mod channel;
 mod message;
 mod search;
 mod user;
@@ -23,6 +24,9 @@ pub async fn dispatch(command: Command) -> Result<()> {
         }
         Command::User { subcommand } => {
             user::handle_user(subcommand).await
+        }
+        Command::Channel { subcommand } => {
+            channel::handle_channel(subcommand).await
         }
     }
 }

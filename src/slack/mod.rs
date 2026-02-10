@@ -12,6 +12,9 @@ pub mod search_raw;
 pub mod users;
 
 pub use canvas::{fetch_canvas, parse_canvas_identifier};
+pub use channels::{
+    get_conversation_info, join_conversation, leave_conversation, list_conversations,
+};
 pub use client::SlackClient;
 pub use files::download_file;
 pub use messages::{

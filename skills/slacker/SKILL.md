@@ -2,13 +2,15 @@
 name: slacker
 description: |
   Slack automation CLI for AI agents. Use when:
+  - Discovering channels in a workspace (list, search, get channel info)
+  - Managing channel membership (join, leave channels)
   - Reading a Slack message or thread (given a URL or channel+ts)
   - Downloading Slack attachments (snippets, images, files) to local paths
   - Searching Slack messages or files
   - Sending a reply or adding a reaction
   - Fetching a Slack canvas as markdown
   - Looking up Slack users
-  Triggers: "slack message", "slack thread", "slack URL", "slack link", "read slack", "reply on slack", "search slack"
+  Triggers: "slack channel", "list channels", "join channel", "slack message", "slack thread", "slack URL", "slack link", "read slack", "reply on slack", "search slack"
 ---
 
 # Slack automation with `slackers`
@@ -98,6 +100,34 @@ If you have multiple workspaces configured and you use a channel **name** (`#gen
 ```bash
 slackers message get "#general" --workspace "https://myteam.slack.com" --ts "1770165109.628379"
 ```
+
+## Channel Discovery
+
+Discover and manage channels without prior knowledge:
+
+```bash
+# List all channels you have access to (returns IDs and names)
+slackers channel list
+
+# List only public channels
+slackers channel list --types public_channel
+
+# Get detailed channel information
+# IMPORTANT: For best performance, use channel IDs from 'channel list'
+slackers channel get "C0123456789" --include-num-members
+
+# Using channel names works but requires scanning all channels (can hit rate limits)
+slackers channel get "#general"
+
+# Join a channel (accepts both IDs and names)
+slackers channel join "#random"
+slackers channel join "C0123456789"
+
+# Leave a channel (accepts both IDs and names)
+slackers channel leave "#random"
+```
+
+**Performance tip:** Channel IDs (like `C0123456789`) are faster than names because Slack's API requires ID lookup. Use `channel list` first to get IDs, then use those IDs in subsequent commands.
 
 ## Canvas + Users
 

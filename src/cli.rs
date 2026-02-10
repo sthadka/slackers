@@ -36,6 +36,11 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: UserCommand,
     },
+    /// Channel discovery and management
+    Channel {
+        #[command(subcommand)]
+        subcommand: ChannelCommand,
+    },
 }
 
 // ============================================================================
@@ -345,6 +350,66 @@ pub enum UserCommand {
     Get {
         /// User id (U...) or @handle/handle
         user: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+}
+
+// ============================================================================
+// Channel Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum ChannelCommand {
+    /// List channels/conversations in the workspace
+    List {
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+
+        /// Conversation types (public_channel, private_channel, mpim, im). Repeatable.
+        #[arg(long)]
+        types: Option<Vec<String>>,
+
+        /// Exclude archived channels
+        #[arg(long, default_value = "true")]
+        exclude_archived: bool,
+
+        /// Max channels (default 200)
+        #[arg(long, default_value = "200")]
+        limit: u32,
+    },
+
+    /// Get detailed information about a channel
+    Get {
+        /// Channel id (C...) or #name/name
+        channel: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+
+        /// Include member count
+        #[arg(long)]
+        include_num_members: bool,
+    },
+
+    /// Join a channel
+    Join {
+        /// Channel id (C...) or #name/name
+        channel: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+
+    /// Leave a channel
+    Leave {
+        /// Channel id (C...) or #name/name
+        channel: String,
 
         /// Workspace URL (required if you have multiple workspaces)
         #[arg(long)]
