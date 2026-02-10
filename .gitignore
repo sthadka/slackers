@@ -1,0 +1,49 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# macOS
+.AppleDouble
+.LSOverride
+._*
+
+# Testing
+*.profraw
+*.profdata
+
+# Documentation
+/doc/
+
+# Backup files
+*.bak
+*.tmp
+*~
+
+# Local configuration
+.env
+.env.local
+
+# Claude Code
+.claude/
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Downloads from slackers
+~/.config/slackers/tmp/
+~/Library/Application Support/slackers/tmp/
