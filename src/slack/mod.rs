@@ -18,8 +18,8 @@ pub use channels::{
 pub use client::SlackClient;
 pub use files::download_file;
 pub use messages::{
-    fetch_message, fetch_thread, get_thread_summary, to_compact_message, CompactMessageOptions,
-    CompactSlackMessage,
+    fetch_message, fetch_thread, filter_messages, get_thread_summary, to_compact_message,
+    CompactMessageOptions, CompactSlackMessage, MessageFilter,
 };
 pub use search::{search_slack, SearchKind, SearchOptions};
 pub use search_files::{search_files, FileSearchResult, SearchFilesInput};

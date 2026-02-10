@@ -3,8 +3,8 @@ use crate::cli::{MessageCommand, MessageGetOptions, MessageListOptions, ReactCom
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::slack::{
-    download_file, fetch_message, fetch_thread, get_thread_summary, to_compact_message,
-    CompactMessageOptions, SlackClient,
+    download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary,
+    to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
 use serde_json::json;
@@ -157,7 +157,22 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
     // Fetch thread
-    let messages = fetch_thread(&client, &channel_id, &thread_ts).await?;
+    let mut messages = fetch_thread(&client, &channel_id, &thread_ts).await?;
+
+    // Apply filters if specified
+    let filter = MessageFilter {
+        user: options.user.clone(),
+        has_link: options.has_link,
+        has_file: options.has_file,
+        has_reaction: options.has_reaction,
+    };
+
+    messages = filter_messages(messages, &filter);
+
+    // Apply limit if specified
+    if let Some(limit) = options.limit {
+        messages.truncate(limit);
+    }
 
     // Convert to compact messages
     let max_chars = if options.max_body_chars < 0 {

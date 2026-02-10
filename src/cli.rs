@@ -192,6 +192,34 @@ pub struct MessageListOptions {
     /// Include reactions + reacting users
     #[arg(long)]
     pub include_reactions: bool,
+
+    /// Maximum number of messages to return (default: 100)
+    #[arg(long)]
+    pub limit: Option<usize>,
+
+    /// Only messages after this timestamp (format: seconds.micros or YYYY-MM-DD)
+    #[arg(long)]
+    pub after_ts: Option<String>,
+
+    /// Only messages before this timestamp (format: seconds.micros or YYYY-MM-DD)
+    #[arg(long)]
+    pub before_ts: Option<String>,
+
+    /// Filter by user ID (U...) or @handle
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Only show messages with links
+    #[arg(long)]
+    pub has_link: bool,
+
+    /// Only show messages with file attachments
+    #[arg(long)]
+    pub has_file: bool,
+
+    /// Only show messages with reactions
+    #[arg(long)]
+    pub has_reaction: bool,
 }
 
 #[derive(Subcommand, Debug)]

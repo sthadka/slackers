@@ -162,6 +162,180 @@ pub async fn fetch_thread(
     Ok(all_messages)
 }
 
+/// Options for listing channel messages
+#[allow(dead_code)]
+pub struct ListMessagesOptions {
+    /// Maximum number of messages to return (default: 100)
+    pub limit: Option<usize>,
+    /// Only messages after this timestamp (exclusive unless inclusive is true)
+    pub oldest: Option<String>,
+    /// Only messages before this timestamp (exclusive unless inclusive is true)
+    pub latest: Option<String>,
+    /// Include messages with timestamps matching oldest or latest
+    pub inclusive: bool,
+}
+
+impl Default for ListMessagesOptions {
+    fn default() -> Self {
+        Self {
+            limit: Some(100),
+            oldest: None,
+            latest: None,
+            inclusive: false,
+        }
+    }
+}
+
+/// List messages from a channel with pagination and time-range filtering
+///
+/// Returns messages in reverse chronological order (newest first, as returned by Slack API)
+#[allow(dead_code)]
+pub async fn list_channel_messages(
+    client: &SlackClient,
+    channel_id: &str,
+    options: ListMessagesOptions,
+) -> Result<Vec<Value>> {
+    let mut all_messages = Vec::new();
+    let mut cursor: Option<String> = None;
+    let effective_limit = options.limit.unwrap_or(usize::MAX);
+
+    loop {
+        let mut params = vec![
+            ("channel".to_string(), channel_id.to_string()),
+            ("limit".to_string(), "200".to_string()),
+        ];
+
+        if let Some(ref oldest) = options.oldest {
+            params.push(("oldest".to_string(), oldest.clone()));
+        }
+
+        if let Some(ref latest) = options.latest {
+            params.push(("latest".to_string(), latest.clone()));
+        }
+
+        if options.inclusive {
+            params.push(("inclusive".to_string(), "true".to_string()));
+        }
+
+        if let Some(c) = cursor {
+            params.push(("cursor".to_string(), c));
+        }
+
+        let response = client.api_call("conversations.history", params).await?;
+
+        if let Some(messages) = response.get("messages").and_then(|v| v.as_array()) {
+            all_messages.extend(messages.iter().cloned());
+
+            if all_messages.len() >= effective_limit {
+                all_messages.truncate(effective_limit);
+                break;
+            }
+        }
+
+        // Check for pagination
+        cursor = response
+            .get("response_metadata")
+            .and_then(|m| m.get("next_cursor"))
+            .and_then(|c| c.as_str())
+            .filter(|c| !c.is_empty())
+            .map(|c| c.to_string());
+
+        if cursor.is_none() {
+            break;
+        }
+    }
+
+    Ok(all_messages)
+}
+
+/// Message filter criteria
+pub struct MessageFilter {
+    /// Filter by user ID or name
+    pub user: Option<String>,
+    /// Only messages with links
+    pub has_link: bool,
+    /// Only messages with file attachments
+    pub has_file: bool,
+    /// Only messages with reactions
+    pub has_reaction: bool,
+}
+
+impl Default for MessageFilter {
+    fn default() -> Self {
+        Self {
+            user: None,
+            has_link: false,
+            has_file: false,
+            has_reaction: false,
+        }
+    }
+}
+
+/// Filter messages based on criteria
+pub fn filter_messages(messages: Vec<Value>, filter: &MessageFilter) -> Vec<Value> {
+    messages
+        .into_iter()
+        .filter(|msg| {
+            // Filter by user
+            if let Some(ref user_filter) = filter.user {
+                if let Some(user) = msg.get("user").and_then(|v| v.as_str()) {
+                    if user != user_filter {
+                        return false;
+                    }
+                } else {
+                    return false;
+                }
+            }
+
+            // Filter by has_link
+            if filter.has_link {
+                let has_link = msg
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .map(|text| text.contains("http://") || text.contains("https://"))
+                    .unwrap_or(false)
+                    || msg
+                        .get("attachments")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| !arr.is_empty())
+                        .unwrap_or(false);
+
+                if !has_link {
+                    return false;
+                }
+            }
+
+            // Filter by has_file
+            if filter.has_file {
+                let has_file = msg
+                    .get("files")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| !arr.is_empty())
+                    .unwrap_or(false);
+
+                if !has_file {
+                    return false;
+                }
+            }
+
+            // Filter by has_reaction
+            if filter.has_reaction {
+                let has_reaction = msg
+                    .get("reactions")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| !arr.is_empty())
+                    .unwrap_or(false);
+
+                if !has_reaction {
+                    return false;
+                }
+            }
+
+            true
+        })
+        .collect()
+}
+
 /// Convert a full Slack message to compact format
 pub fn to_compact_message(msg: &Value, options: &CompactMessageOptions) -> CompactSlackMessage {
     let ts = msg
@@ -392,5 +566,126 @@ mod tests {
         let compact = to_compact_message(&msg, &options);
 
         assert_eq!(compact.thread_ts, None);
+    }
+
+    #[test]
+    fn test_list_messages_options_default() {
+        let options = ListMessagesOptions::default();
+
+        assert_eq!(options.limit, Some(100));
+        assert_eq!(options.oldest, None);
+        assert_eq!(options.latest, None);
+        assert_eq!(options.inclusive, false);
+    }
+
+    #[test]
+    fn test_list_messages_options_with_time_range() {
+        let options = ListMessagesOptions {
+            limit: Some(50),
+            oldest: Some("1609459200.000000".to_string()),
+            latest: Some("1609545600.000000".to_string()),
+            inclusive: true,
+        };
+
+        assert_eq!(options.limit, Some(50));
+        assert_eq!(options.oldest, Some("1609459200.000000".to_string()));
+        assert_eq!(options.latest, Some("1609545600.000000".to_string()));
+        assert_eq!(options.inclusive, true);
+    }
+
+    #[test]
+    fn test_filter_messages_by_user() {
+        let messages = vec![
+            json!({"ts": "1.0", "user": "U123", "text": "Hello"}),
+            json!({"ts": "2.0", "user": "U456", "text": "Hi"}),
+            json!({"ts": "3.0", "user": "U123", "text": "Bye"}),
+        ];
+
+        let filter = MessageFilter {
+            user: Some("U123".to_string()),
+            ..Default::default()
+        };
+
+        let filtered = filter_messages(messages, &filter);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["ts"], "1.0");
+        assert_eq!(filtered[1]["ts"], "3.0");
+    }
+
+    #[test]
+    fn test_filter_messages_has_link() {
+        let messages = vec![
+            json!({"ts": "1.0", "user": "U123", "text": "Check this https://example.com"}),
+            json!({"ts": "2.0", "user": "U456", "text": "No link here"}),
+            json!({"ts": "3.0", "user": "U123", "text": "Visit http://test.com"}),
+        ];
+
+        let filter = MessageFilter {
+            has_link: true,
+            ..Default::default()
+        };
+
+        let filtered = filter_messages(messages, &filter);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["ts"], "1.0");
+        assert_eq!(filtered[1]["ts"], "3.0");
+    }
+
+    #[test]
+    fn test_filter_messages_has_file() {
+        let messages = vec![
+            json!({"ts": "1.0", "user": "U123", "text": "Doc", "files": [{"id": "F1"}]}),
+            json!({"ts": "2.0", "user": "U456", "text": "No files"}),
+            json!({"ts": "3.0", "user": "U123", "text": "Image", "files": [{"id": "F2"}]}),
+        ];
+
+        let filter = MessageFilter {
+            has_file: true,
+            ..Default::default()
+        };
+
+        let filtered = filter_messages(messages, &filter);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["ts"], "1.0");
+        assert_eq!(filtered[1]["ts"], "3.0");
+    }
+
+    #[test]
+    fn test_filter_messages_has_reaction() {
+        let messages = vec![
+            json!({"ts": "1.0", "user": "U123", "text": "Great!", "reactions": [{"name": "thumbsup", "count": 1}]}),
+            json!({"ts": "2.0", "user": "U456", "text": "Meh"}),
+            json!({"ts": "3.0", "user": "U123", "text": "Nice", "reactions": [{"name": "rocket", "count": 2}]}),
+        ];
+
+        let filter = MessageFilter {
+            has_reaction: true,
+            ..Default::default()
+        };
+
+        let filtered = filter_messages(messages, &filter);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["ts"], "1.0");
+        assert_eq!(filtered[1]["ts"], "3.0");
+    }
+
+    #[test]
+    fn test_filter_messages_combined() {
+        let messages = vec![
+            json!({"ts": "1.0", "user": "U123", "text": "https://example.com", "files": [{"id": "F1"}]}),
+            json!({"ts": "2.0", "user": "U123", "text": "Just text"}),
+            json!({"ts": "3.0", "user": "U456", "text": "https://test.com", "files": [{"id": "F2"}]}),
+        ];
+
+        let filter = MessageFilter {
+            user: Some("U123".to_string()),
+            has_link: true,
+            has_file: true,
+            ..Default::default()
+        };
+
+        let filtered = filter_messages(messages, &filter);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0]["ts"], "1.0");
     }
 }

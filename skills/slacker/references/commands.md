@@ -51,13 +51,20 @@ Run `slackers --help` (or `slackers <command> --help`) for the full option list.
     - `--include-reactions`
 
 - `slackers message list <target>`
-  - Fetches the full thread
+  - Fetches the full thread with filtering and pagination
   - Options:
     - `--workspace <url>` (same rules as above)
     - `--thread-ts <seconds>.<micros>` (required for channel targets unless you pass `--ts`)
     - `--ts <seconds>.<micros>` (optional: resolve a message to its thread)
     - `--max-body-chars <n>` (default `8000`, `-1` unlimited)
     - `--include-reactions`
+    - `--limit <n>` (maximum messages to return, default: 100)
+    - `--after-ts <timestamp>` (only messages after this timestamp)
+    - `--before-ts <timestamp>` (only messages before this timestamp)
+    - `--user <U...|@handle>` (filter by user)
+    - `--has-link` (only messages with links)
+    - `--has-file` (only messages with file attachments)
+    - `--has-reaction` (only messages with reactions)
 
 - `slackers message send <target> <text>`
   - If `<target>` is a Slack message URL, replies in that message's thread.

@@ -72,6 +72,22 @@ slackers message get "https://workspace.slack.com/archives/C123/p170000000000000
 slackers message list "https://workspace.slack.com/archives/C123/p1700000000000000"
 ```
 
+3. Filter thread messages:
+
+```bash
+# Only show messages from a specific user
+slackers message list "https://workspace.slack.com/archives/C123/p1700000000000000" --user "@alice"
+
+# Only show messages with file attachments
+slackers message list "https://workspace.slack.com/archives/C123/p1700000000000000" --has-file
+
+# Limit to first 10 messages
+slackers message list "https://workspace.slack.com/archives/C123/p1700000000000000" --limit 10
+
+# Combine filters: messages from alice with links
+slackers message list "https://workspace.slack.com/archives/C123/p1700000000000000" --user "@alice" --has-link
+```
+
 ## Attachments (snippets/images/files)
 
 `message get/list` and `search` auto-download attachments and include absolute paths in JSON output (typically under `message.files[].path` / `files[].path`).

@@ -12,8 +12,10 @@ slackers is a full-featured Slack CLI that provides complete workspace managemen
 - Fetch individual messages and entire threads
 - Send messages to channels and threads
 - Add reactions to messages
-- List channel history with filtering
+- List and filter thread messages with advanced criteria
 - Download file attachments automatically
+- Filter messages by user, links, files, or reactions
+- Limit and paginate message results
 
 ### Search
 - Search messages across workspaces
@@ -154,9 +156,23 @@ slackers auth parse-curl       # Parse cURL command from stdin
 
 ```bash
 slackers message get <url>                    # Get message or thread
-slackers message list <target>                # List channel messages
+slackers message list <target>                # List thread messages
 slackers message send <target> <text>         # Send message
 slackers message react <target> <emoji>       # Add reaction
+```
+
+Message list options:
+- `--limit` - Maximum messages to return
+- `--user` - Filter by user ID or @handle
+- `--has-link` - Only messages with links
+- `--has-file` - Only messages with file attachments
+- `--has-reaction` - Only messages with reactions
+- `--after-ts`, `--before-ts` - Time-range filtering
+
+Example:
+```bash
+# Get first 10 messages from a user with file attachments
+slackers message list <thread-url> --user "@alice" --has-file --limit 10
 ```
 
 ### Search
