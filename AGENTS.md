@@ -123,7 +123,7 @@ src/
    git status  # MUST show "up to date with origin"
    ```
 5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
+6. **Verify** - All changes committed using [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) format AND pushed
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
