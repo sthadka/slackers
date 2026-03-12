@@ -1,3 +1,4 @@
+use crate::app_config::{load_channel_cache, save_channel_cache};
 use crate::error::{ParseError, Result, SlackersError};
 use crate::slack::SlackClient;
 use regex::Regex;
@@ -222,16 +223,26 @@ pub fn normalize_channel_input(input: &str) -> ChannelInput {
     }
 }
 
-/// Resolve a channel input (name or ID) to a channel ID
+/// Resolve a channel input (name or ID) to a channel ID.
 ///
 /// If already an ID, returns it directly.
-/// Otherwise, paginates through conversations.list to find matching name.
+/// Otherwise checks ~/.config/slackers/channel-cache.json first, then
+/// paginates through conversations.list and caches the result.
 pub async fn resolve_channel_id(client: &SlackClient, input: &str) -> Result<String> {
     let normalized = normalize_channel_input(input);
 
     match normalized {
         ChannelInput::Id(id) => Ok(id),
-        ChannelInput::Name(name) => find_channel_by_name(client, &name).await,
+        ChannelInput::Name(name) => {
+            let mut cache = load_channel_cache();
+            if let Some(id) = cache.get(&name) {
+                return Ok(id.clone());
+            }
+            let id = find_channel_by_name(client, &name).await?;
+            cache.insert(name, id.clone());
+            save_channel_cache(&cache);
+            Ok(id)
+        }
     }
 }
 

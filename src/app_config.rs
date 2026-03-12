@@ -75,6 +75,35 @@ pub fn history_cursors_path() -> Result<PathBuf, ()> {
     Ok(dir.join("slackers").join("history-cursors.json"))
 }
 
+/// ~/.config/slackers/channel-cache.json
+/// Stores { channel_name -> channel_id } to avoid repeated conversations.list pagination.
+pub fn channel_cache_path() -> Result<PathBuf, ()> {
+    let dir = dirs::config_dir().ok_or(())?;
+    Ok(dir.join("slackers").join("channel-cache.json"))
+}
+
+pub fn load_channel_cache() -> HashMap<String, String> {
+    let Ok(path) = channel_cache_path() else {
+        return HashMap::new();
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return HashMap::new();
+    };
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+pub fn save_channel_cache(cache: &HashMap<String, String>) {
+    let Ok(path) = channel_cache_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(content) = serde_json::to_string_pretty(cache) {
+        let _ = std::fs::write(path, content);
+    }
+}
+
 /// Load the saved resume-cursor map from disk (silently returns empty on error).
 pub fn load_history_cursors() -> HashMap<String, String> {
     let Ok(path) = history_cursors_path() else {
