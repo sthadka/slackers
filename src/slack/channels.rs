@@ -226,7 +226,6 @@ pub fn normalize_channel_input(input: &str) -> ChannelInput {
 ///
 /// If already an ID, returns it directly.
 /// Otherwise, paginates through conversations.list to find matching name.
-#[allow(dead_code)]
 pub async fn resolve_channel_id(client: &SlackClient, input: &str) -> Result<String> {
     let normalized = normalize_channel_input(input);
 

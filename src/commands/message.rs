@@ -4,8 +4,8 @@ use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::slack::{
     download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary,
-    list_channel_messages, to_compact_message, CompactMessageOptions, ListMessagesOptions,
-    MessageFilter, SlackClient,
+    list_channel_messages, resolve_channel_id, to_compact_message, CompactMessageOptions,
+    ListMessagesOptions, MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
 use chrono::NaiveDate;
@@ -308,6 +308,9 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     let auth_result = resolve_auth(options.workspace.as_deref())?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
+    // Resolve channel name (#name or bare name) to an ID if needed
+    let channel_id = resolve_channel_id(&client, channel).await?;
+
     // Convert YYYY-MM-DD date strings to Unix timestamp strings for Slack API
     let oldest = options
         .after
@@ -323,7 +326,7 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     // Fetch channel messages
     let messages = list_channel_messages(
         &client,
-        channel,
+        &channel_id,
         ListMessagesOptions {
             limit: Some(options.limit),
             oldest,
@@ -354,7 +357,7 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
         let mut msg_value = serde_json::to_value(compact)?;
 
         if options.include_threads && reply_count > 0 {
-            let thread = fetch_thread(&client, channel, &ts).await?;
+            let thread = fetch_thread(&client, &channel_id, &ts).await?;
             // Skip the first element (root message), compact the replies
             let replies: Vec<serde_json::Value> = thread
                 .iter()
@@ -376,6 +379,7 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     let message_count = output_messages.len();
     let output = json!({
         "channel": channel,
+        "channel_id": channel_id,
         "message_count": message_count,
         "messages": output_messages,
     });
