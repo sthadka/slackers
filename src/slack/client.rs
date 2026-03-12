@@ -32,11 +32,20 @@ impl SlackClient {
     ///
     /// Handles both standard token and browser token modes.
     /// Retries on 429 (rate limit) with exponential backoff.
+    /// Set SLACKERS_DEBUG=1 to log every call to stderr.
     pub async fn api_call(
         &self,
         method: &str,
         params: Vec<(String, String)>,
     ) -> Result<Value> {
+        if std::env::var("SLACKERS_DEBUG").is_ok() {
+            let args = params
+                .iter()
+                .map(|(k, v)| format!("{}={}", k, v))
+                .collect::<Vec<_>>()
+                .join(" ");
+            eprintln!("[api] {} {}", method, args);
+        }
         let mut attempt = 0;
 
         loop {
