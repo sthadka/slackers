@@ -1,12 +1,14 @@
 use crate::auth::resolve_auth;
-use crate::cli::{MessageCommand, MessageGetOptions, MessageListOptions, ReactCommand};
+use crate::cli::{MessageCommand, MessageGetOptions, MessageHistoryOptions, MessageListOptions, ReactCommand};
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::slack::{
     download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary,
-    to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
+    list_channel_messages, to_compact_message, CompactMessageOptions, ListMessagesOptions,
+    MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
+use chrono::NaiveDate;
 use serde_json::json;
 
 pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
@@ -20,6 +22,9 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
             thread_ts,
         } => handle_message_send(&target, &text, workspace.as_deref(), thread_ts.as_deref()).await,
         MessageCommand::React { subcommand } => handle_react(subcommand).await,
+        MessageCommand::History { channel, options } => {
+            handle_message_history(&channel, options).await
+        }
     }
 }
 
@@ -296,6 +301,107 @@ async fn handle_react(subcommand: ReactCommand) -> Result<()> {
             ts,
         } => handle_react_remove(&target, &emoji, workspace.as_deref(), ts.as_deref()).await,
     }
+}
+
+async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -> Result<()> {
+    // Resolve auth
+    let auth_result = resolve_auth(options.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
+
+    // Convert YYYY-MM-DD date strings to Unix timestamp strings for Slack API
+    let oldest = options
+        .after
+        .as_deref()
+        .map(|s| date_to_ts(s))
+        .transpose()?;
+    let latest = options
+        .before
+        .as_deref()
+        .map(|s| date_to_ts(s))
+        .transpose()?;
+
+    // Fetch channel messages
+    let messages = list_channel_messages(
+        &client,
+        channel,
+        ListMessagesOptions {
+            limit: Some(options.limit),
+            oldest,
+            latest,
+            inclusive: false,
+        },
+    )
+    .await?;
+
+    let max_chars = if options.max_body_chars < 0 {
+        None
+    } else {
+        Some(options.max_body_chars as usize)
+    };
+
+    let compact_options = CompactMessageOptions {
+        max_content_chars: max_chars,
+        include_thread_ts: true,
+    };
+
+    let mut output_messages: Vec<serde_json::Value> = Vec::new();
+
+    for msg in &messages {
+        let compact = to_compact_message(msg, &compact_options);
+        let reply_count = compact.reply_count.unwrap_or(0);
+        let ts = compact.ts.clone();
+
+        let mut msg_value = serde_json::to_value(compact)?;
+
+        if options.include_threads && reply_count > 0 {
+            let thread = fetch_thread(&client, channel, &ts).await?;
+            // Skip the first element (root message), compact the replies
+            let replies: Vec<serde_json::Value> = thread
+                .iter()
+                .skip(1)
+                .map(|r| {
+                    let compact_reply = to_compact_message(r, &compact_options);
+                    serde_json::to_value(compact_reply)
+                })
+                .collect::<std::result::Result<_, _>>()?;
+
+            if let Some(obj) = msg_value.as_object_mut() {
+                obj.insert("thread".to_string(), json!(replies));
+            }
+        }
+
+        output_messages.push(msg_value);
+    }
+
+    let message_count = output_messages.len();
+    let output = json!({
+        "channel": channel,
+        "message_count": message_count,
+        "messages": output_messages,
+    });
+
+    println!("{}", to_json_output(&output));
+    Ok(())
+}
+
+/// Convert a YYYY-MM-DD string to a Unix timestamp string for the Slack API.
+/// If the string already contains a '.', it is treated as a raw ts and passed through unchanged.
+fn date_to_ts(s: &str) -> Result<String> {
+    if s.contains('.') {
+        return Ok(s.to_string());
+    }
+    let date = NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|_| {
+        SlackersError::Other(format!(
+            "Invalid date '{}': expected YYYY-MM-DD or a raw Slack ts",
+            s
+        ))
+    })?;
+    let ts = date
+        .and_hms_opt(0, 0, 0)
+        .ok_or_else(|| SlackersError::Other("Failed to construct datetime".to_string()))?
+        .and_utc()
+        .timestamp();
+    Ok(ts.to_string())
 }
 
 async fn handle_react_add(

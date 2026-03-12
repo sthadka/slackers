@@ -146,6 +146,46 @@ pub enum MessageCommand {
         #[command(subcommand)]
         subcommand: ReactCommand,
     },
+
+    /// Fetch all messages from a channel, with optional thread expansion
+    History {
+        /// Channel name (#name) or ID (C...)
+        channel: String,
+
+        #[command(flatten)]
+        options: MessageHistoryOptions,
+    },
+}
+
+#[derive(Args, Debug)]
+pub struct MessageHistoryOptions {
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+
+    /// Max top-level messages to fetch
+    #[arg(long, default_value = "500")]
+    pub limit: usize,
+
+    /// Only messages after YYYY-MM-DD
+    #[arg(long)]
+    pub after: Option<String>,
+
+    /// Only messages before YYYY-MM-DD
+    #[arg(long)]
+    pub before: Option<String>,
+
+    /// Max message body characters (-1 for unlimited, default 8000)
+    #[arg(long, default_value = "8000")]
+    pub max_body_chars: i32,
+
+    /// Fetch and inline full thread replies for threaded messages
+    #[arg(long)]
+    pub include_threads: bool,
+
+    /// Include reactions on messages
+    #[arg(long)]
+    pub include_reactions: bool,
 }
 
 #[derive(Args, Debug)]
