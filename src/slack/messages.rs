@@ -164,6 +164,7 @@ pub async fn fetch_thread(
 }
 
 /// Options for listing channel messages
+#[allow(dead_code)]
 pub struct ListMessagesOptions {
     /// Maximum number of messages to return (default: 100)
     pub limit: Option<usize>,
@@ -189,6 +190,7 @@ impl Default for ListMessagesOptions {
 /// List messages from a channel with pagination and time-range filtering
 ///
 /// Returns messages in reverse chronological order (newest first, as returned by Slack API)
+#[allow(dead_code)]
 pub async fn list_channel_messages(
     client: &SlackClient,
     channel_id: &str,
