@@ -312,15 +312,47 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
 
     let channel_id = resolve_channel_id(&client, channel).await?;
 
-    // Auto-resume: if no explicit --before, check for a saved cursor for this channel.
+    // Determine output file: explicit --output or <channel>-history.json in CWD.
+    let output_path = {
+        let default_name = format!("{}-history.json", channel.trim_start_matches('#'));
+        std::path::PathBuf::from(options.output.as_deref().unwrap_or(&default_name))
+    };
+
+    // Load messages already saved from a previous (possibly interrupted) run.
+    let mut output_messages: Vec<Value> = load_history_file(&output_path);
+    if !output_messages.is_empty() {
+        eprintln!(
+            "[slackers] loaded {} existing messages from {}",
+            output_messages.len(),
+            output_path.display()
+        );
+    }
+
+    // Derive resume ts from the file (oldest message = last entry, newest-first order).
+    // Fall back to the cursor store if the file is empty.
     let mut cursors = load_history_cursors();
-    let resume_ts = if config.history.auto_resume && options.before.is_none() {
-        cursors.get(&channel_id).cloned()
+    let resume_ts = if options.before.is_none() {
+        output_messages
+            .last()
+            .and_then(|m| m.get("ts"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| {
+                if config.history.auto_resume {
+                    cursors.get(&channel_id).cloned()
+                } else {
+                    None
+                }
+            })
     } else {
         None
     };
     if let Some(ref ts) = resume_ts {
-        eprintln!("[slackers] resuming from previous run (--before {})", ts);
+        eprintln!(
+            "[slackers] resuming — fetching messages older than {} into {}",
+            ts,
+            output_path.display()
+        );
     }
 
     let oldest = options.after.as_deref().map(date_to_ts).transpose()?;
@@ -329,11 +361,25 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
         None => options.before.as_deref().map(date_to_ts).transpose()?,
     };
 
-    // Paginate manually so we can persist the cursor after every page.
-    let mut all_messages: Vec<Value> = Vec::new();
+    let max_chars = if options.max_body_chars < 0 {
+        None
+    } else {
+        Some(options.max_body_chars as usize)
+    };
+    let compact_options = CompactMessageOptions {
+        max_content_chars: max_chars,
+        include_thread_ts: true,
+    };
+
+    let remaining_limit = options.limit.saturating_sub(output_messages.len());
+    let mut fetched_total: usize = 0;
     let mut page_cursor: Option<String> = None;
 
-    loop {
+    'pages: loop {
+        if fetched_total >= remaining_limit {
+            break;
+        }
+
         let mut params = vec![
             ("channel".to_string(), channel_id.clone()),
             ("limit".to_string(), "200".to_string()),
@@ -350,17 +396,59 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
 
         let response = client.api_call("conversations.history", params).await?;
 
-        let page: Vec<Value> = response
+        let mut page: Vec<Value> = response
             .get("messages")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().cloned().collect())
             .unwrap_or_default();
 
-        all_messages.extend(page);
+        // Trim to limit.
+        let can_take = remaining_limit.saturating_sub(fetched_total);
+        if page.len() > can_take {
+            page.truncate(can_take);
+        }
 
-        if all_messages.len() >= options.limit {
-            all_messages.truncate(options.limit);
-            break;
+        // Apply config filters, compact, optionally fetch threads — per page.
+        let page = apply_config_filters(page, &config.history);
+        for msg in &page {
+            let compact = to_compact_message(msg, &compact_options);
+            let reply_count = compact.reply_count.unwrap_or(0);
+            let ts = compact.ts.clone();
+            let mut msg_value = serde_json::to_value(compact)?;
+
+            if options.include_threads && reply_count > 0 {
+                let thread = fetch_thread(&client, &channel_id, &ts).await?;
+                let replies: Vec<Value> = thread
+                    .iter()
+                    .skip(1)
+                    .map(|r| serde_json::to_value(to_compact_message(r, &compact_options)))
+                    .collect::<std::result::Result<_, _>>()?;
+                if let Some(obj) = msg_value.as_object_mut() {
+                    obj.insert("thread".to_string(), json!(replies));
+                }
+            }
+
+            output_messages.push(msg_value);
+            fetched_total += 1;
+        }
+
+        // Write the file after every page so an interrupt loses at most one page.
+        write_history_file(&output_path, channel, &channel_id, &output_messages)?;
+
+        // Save cursor store as a secondary fallback.
+        if let Some(oldest_ts) = output_messages
+            .last()
+            .and_then(|m| m.get("ts"))
+            .and_then(|v| v.as_str())
+        {
+            cursors.insert(channel_id.clone(), oldest_ts.to_string());
+            save_history_cursors(&cursors);
+            eprintln!(
+                "[slackers] {} messages saved to {} (oldest: {})",
+                output_messages.len(),
+                output_path.display(),
+                oldest_ts
+            );
         }
 
         page_cursor = response
@@ -371,68 +459,26 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
             .map(|c| c.to_string());
 
         if page_cursor.is_none() {
-            break;
-        }
-
-        // Save cursor after each page so an interrupt is recoverable.
-        if let Some(oldest_ts) = all_messages
-            .last()
-            .and_then(|m| m.get("ts"))
-            .and_then(|v| v.as_str())
-        {
-            cursors.insert(channel_id.clone(), oldest_ts.to_string());
-            save_history_cursors(&cursors);
-            eprintln!(
-                "[slackers] fetched {} messages (resume with --before {})",
-                all_messages.len(),
-                oldest_ts
-            );
+            break 'pages;
         }
 
         // Stay under Slack Tier-3 limit (50 req/min).
         tokio::time::sleep(Duration::from_millis(1200)).await;
     }
 
-    // Apply config filters (exclude_subtypes, exclude_users).
-    let all_messages = apply_config_filters(all_messages, &config.history);
-
-    let max_chars = if options.max_body_chars < 0 {
-        None
-    } else {
-        Some(options.max_body_chars as usize)
-    };
-    let compact_options = CompactMessageOptions {
-        max_content_chars: max_chars,
-        include_thread_ts: true,
-    };
-
-    let mut output_messages: Vec<Value> = Vec::new();
-    for msg in &all_messages {
-        let compact = to_compact_message(msg, &compact_options);
-        let reply_count = compact.reply_count.unwrap_or(0);
-        let ts = compact.ts.clone();
-        let mut msg_value = serde_json::to_value(compact)?;
-
-        if options.include_threads && reply_count > 0 {
-            let thread = fetch_thread(&client, &channel_id, &ts).await?;
-            let replies: Vec<Value> = thread
-                .iter()
-                .skip(1)
-                .map(|r| serde_json::to_value(to_compact_message(r, &compact_options)))
-                .collect::<std::result::Result<_, _>>()?;
-            if let Some(obj) = msg_value.as_object_mut() {
-                obj.insert("thread".to_string(), json!(replies));
-            }
-        }
-
-        output_messages.push(msg_value);
-    }
-
-    // On success, clear the resume cursor for this channel.
+    // Successful completion — clear the cursor store entry for this channel.
     cursors.remove(&channel_id);
     save_history_cursors(&cursors);
 
-    let resume_before = all_messages
+    // Final file write (ensures clean state even if the loop exited via limit).
+    write_history_file(&output_path, channel, &channel_id, &output_messages)?;
+    eprintln!(
+        "[slackers] done — {} messages in {}",
+        output_messages.len(),
+        output_path.display()
+    );
+
+    let resume_before = output_messages
         .last()
         .and_then(|m| m.get("ts"))
         .and_then(|v| v.as_str())
@@ -442,6 +488,7 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
         "channel": channel,
         "channel_id": channel_id,
         "message_count": output_messages.len(),
+        "output_file": output_path.display().to_string(),
         "messages": output_messages,
     });
     if let Some(ts) = resume_before {
@@ -449,6 +496,41 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     }
 
     println!("{}", to_json_output(&output));
+    Ok(())
+}
+
+/// Load previously saved processed messages from a history file.
+/// Returns an empty vec if the file does not exist or cannot be parsed.
+fn load_history_file(path: &std::path::Path) -> Vec<Value> {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let parsed: Value = match serde_json::from_str(&content) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    parsed
+        .get("messages")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Write the current set of processed messages to the history file.
+fn write_history_file(
+    path: &std::path::Path,
+    channel: &str,
+    channel_id: &str,
+    messages: &[Value],
+) -> Result<()> {
+    let content = serde_json::to_string_pretty(&json!({
+        "channel": channel,
+        "channel_id": channel_id,
+        "message_count": messages.len(),
+        "messages": messages,
+    }))?;
+    std::fs::write(path, content)?;
     Ok(())
 }
 

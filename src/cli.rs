@@ -186,6 +186,12 @@ pub struct MessageHistoryOptions {
     /// Include reactions on messages
     #[arg(long)]
     pub include_reactions: bool,
+
+    /// Output file path. Defaults to <channel>-history.json in the current directory.
+    /// Messages are written incrementally after each page so the file is always
+    /// up to date. An existing file is used as the starting point for resume.
+    #[arg(long, short = 'o')]
+    pub output: Option<String>,
 }
 
 #[derive(Args, Debug)]
