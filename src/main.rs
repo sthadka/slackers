@@ -1,3 +1,4 @@
+mod app_config;
 mod auth;
 mod cli;
 mod commands;

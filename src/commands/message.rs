@@ -1,15 +1,16 @@
+use crate::app_config::{load_app_config, load_history_cursors, save_history_cursors};
 use crate::auth::resolve_auth;
 use crate::cli::{MessageCommand, MessageGetOptions, MessageHistoryOptions, MessageListOptions, ReactCommand};
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::slack::{
     download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary,
-    list_channel_messages, resolve_channel_id, to_compact_message, CompactMessageOptions,
-    ListMessagesOptions, MessageFilter, SlackClient,
+    resolve_channel_id, to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
 use chrono::NaiveDate;
-use serde_json::json;
+use serde_json::{json, Value};
+use std::time::Duration;
 
 pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
     match subcommand {
@@ -304,70 +305,121 @@ async fn handle_react(subcommand: ReactCommand) -> Result<()> {
 }
 
 async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -> Result<()> {
-    // Resolve auth
+    let config = load_app_config();
+
     let auth_result = resolve_auth(options.workspace.as_deref())?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
-    // Resolve channel name (#name or bare name) to an ID if needed
     let channel_id = resolve_channel_id(&client, channel).await?;
 
-    // Convert YYYY-MM-DD date strings to Unix timestamp strings for Slack API
-    let oldest = options
-        .after
-        .as_deref()
-        .map(|s| date_to_ts(s))
-        .transpose()?;
-    let latest = options
-        .before
-        .as_deref()
-        .map(|s| date_to_ts(s))
-        .transpose()?;
+    // Auto-resume: if no explicit --before, check for a saved cursor for this channel.
+    let mut cursors = load_history_cursors();
+    let resume_ts = if config.history.auto_resume && options.before.is_none() {
+        cursors.get(&channel_id).cloned()
+    } else {
+        None
+    };
+    if let Some(ref ts) = resume_ts {
+        eprintln!("[slackers] resuming from previous run (--before {})", ts);
+    }
 
-    // Fetch channel messages
-    let messages = list_channel_messages(
-        &client,
-        &channel_id,
-        ListMessagesOptions {
-            limit: Some(options.limit),
-            oldest,
-            latest,
-            inclusive: false,
-        },
-    )
-    .await?;
+    let oldest = options.after.as_deref().map(date_to_ts).transpose()?;
+    let latest = match resume_ts {
+        Some(ts) => Some(ts),
+        None => options.before.as_deref().map(date_to_ts).transpose()?,
+    };
+
+    // Paginate manually so we can persist the cursor after every page.
+    let mut all_messages: Vec<Value> = Vec::new();
+    let mut page_cursor: Option<String> = None;
+
+    loop {
+        let mut params = vec![
+            ("channel".to_string(), channel_id.clone()),
+            ("limit".to_string(), "200".to_string()),
+        ];
+        if let Some(ref ts) = oldest {
+            params.push(("oldest".to_string(), ts.clone()));
+        }
+        if let Some(ref ts) = latest {
+            params.push(("latest".to_string(), ts.clone()));
+        }
+        if let Some(ref c) = page_cursor {
+            params.push(("cursor".to_string(), c.clone()));
+        }
+
+        let response = client.api_call("conversations.history", params).await?;
+
+        let page: Vec<Value> = response
+            .get("messages")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().cloned().collect())
+            .unwrap_or_default();
+
+        all_messages.extend(page);
+
+        if all_messages.len() >= options.limit {
+            all_messages.truncate(options.limit);
+            break;
+        }
+
+        page_cursor = response
+            .get("response_metadata")
+            .and_then(|m| m.get("next_cursor"))
+            .and_then(|c| c.as_str())
+            .filter(|c| !c.is_empty())
+            .map(|c| c.to_string());
+
+        if page_cursor.is_none() {
+            break;
+        }
+
+        // Save cursor after each page so an interrupt is recoverable.
+        if let Some(oldest_ts) = all_messages
+            .last()
+            .and_then(|m| m.get("ts"))
+            .and_then(|v| v.as_str())
+        {
+            cursors.insert(channel_id.clone(), oldest_ts.to_string());
+            save_history_cursors(&cursors);
+            eprintln!(
+                "[slackers] fetched {} messages (resume with --before {})",
+                all_messages.len(),
+                oldest_ts
+            );
+        }
+
+        // Stay under Slack Tier-3 limit (50 req/min).
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+    }
+
+    // Apply config filters (exclude_subtypes, exclude_users).
+    let all_messages = apply_config_filters(all_messages, &config.history);
 
     let max_chars = if options.max_body_chars < 0 {
         None
     } else {
         Some(options.max_body_chars as usize)
     };
-
     let compact_options = CompactMessageOptions {
         max_content_chars: max_chars,
         include_thread_ts: true,
     };
 
-    let mut output_messages: Vec<serde_json::Value> = Vec::new();
-
-    for msg in &messages {
+    let mut output_messages: Vec<Value> = Vec::new();
+    for msg in &all_messages {
         let compact = to_compact_message(msg, &compact_options);
         let reply_count = compact.reply_count.unwrap_or(0);
         let ts = compact.ts.clone();
-
         let mut msg_value = serde_json::to_value(compact)?;
 
         if options.include_threads && reply_count > 0 {
             let thread = fetch_thread(&client, &channel_id, &ts).await?;
-            // Skip the first element (root message), compact the replies
-            let replies: Vec<serde_json::Value> = thread
+            let replies: Vec<Value> = thread
                 .iter()
                 .skip(1)
-                .map(|r| {
-                    let compact_reply = to_compact_message(r, &compact_options);
-                    serde_json::to_value(compact_reply)
-                })
+                .map(|r| serde_json::to_value(to_compact_message(r, &compact_options)))
                 .collect::<std::result::Result<_, _>>()?;
-
             if let Some(obj) = msg_value.as_object_mut() {
                 obj.insert("thread".to_string(), json!(replies));
             }
@@ -376,10 +428,11 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
         output_messages.push(msg_value);
     }
 
-    let message_count = output_messages.len();
-    // oldest_ts is the last element since Slack returns newest-first.
-    // Users can pass this to --before on a subsequent run to fetch older messages.
-    let resume_before = messages
+    // On success, clear the resume cursor for this channel.
+    cursors.remove(&channel_id);
+    save_history_cursors(&cursors);
+
+    let resume_before = all_messages
         .last()
         .and_then(|m| m.get("ts"))
         .and_then(|v| v.as_str())
@@ -388,7 +441,7 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     let mut output = json!({
         "channel": channel,
         "channel_id": channel_id,
-        "message_count": message_count,
+        "message_count": output_messages.len(),
         "messages": output_messages,
     });
     if let Some(ts) = resume_before {
@@ -397,6 +450,37 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
 
     println!("{}", to_json_output(&output));
     Ok(())
+}
+
+fn apply_config_filters(
+    messages: Vec<Value>,
+    config: &crate::app_config::HistoryConfig,
+) -> Vec<Value> {
+    if config.exclude_subtypes.is_empty() && config.exclude_users.is_empty() {
+        return messages;
+    }
+    messages
+        .into_iter()
+        .filter(|msg| {
+            // Drop messages whose subtype is in exclude_subtypes.
+            if !config.exclude_subtypes.is_empty() {
+                if let Some(subtype) = msg.get("subtype").and_then(|v| v.as_str()) {
+                    if config.exclude_subtypes.iter().any(|s| s == subtype) {
+                        return false;
+                    }
+                }
+            }
+            // Drop messages from excluded users.
+            if !config.exclude_users.is_empty() {
+                if let Some(user) = msg.get("user").and_then(|v| v.as_str()) {
+                    if config.exclude_users.iter().any(|u| u == user) {
+                        return false;
+                    }
+                }
+            }
+            true
+        })
+        .collect()
 }
 
 /// Convert a YYYY-MM-DD string to a Unix timestamp string for the Slack API.
