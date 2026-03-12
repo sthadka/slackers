@@ -408,7 +408,8 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
             page.truncate(can_take);
         }
 
-        // Apply config filters, compact, optionally fetch threads — per page.
+        // Apply config filters, compact, optionally fetch threads — per message.
+        // The file is written after each message so an interrupt loses at most one message.
         let page = apply_config_filters(page, &config.history);
         for msg in &page {
             let compact = to_compact_message(msg, &compact_options);
@@ -417,6 +418,8 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
             let mut msg_value = serde_json::to_value(compact)?;
 
             if options.include_threads && reply_count > 0 {
+                // Respect the rate limit between thread fetches.
+                tokio::time::sleep(Duration::from_millis(1200)).await;
                 let thread = fetch_thread(&client, &channel_id, &ts).await?;
                 let replies: Vec<Value> = thread
                     .iter()
@@ -430,10 +433,10 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
 
             output_messages.push(msg_value);
             fetched_total += 1;
-        }
 
-        // Write the file after every page so an interrupt loses at most one page.
-        write_history_file(&output_path, channel, &channel_id, &output_messages)?;
+            // Persist after every message — not just per page.
+            write_history_file(&output_path, channel, &channel_id, &output_messages)?;
+        }
 
         // Save cursor store as a secondary fallback.
         if let Some(oldest_ts) = output_messages
