@@ -4,6 +4,7 @@ use crate::slack::SlackClient;
 use crate::target::SlackMessageRef;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::time::Duration;
 
 /// Compact representation of a Slack message
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -241,6 +242,23 @@ pub async fn list_channel_messages(
         if cursor.is_none() {
             break;
         }
+
+        // Print progress so the user can see oldest ts fetched so far.
+        // If interrupted, they can pass this ts to --before to resume.
+        let oldest_ts = all_messages
+            .last()
+            .and_then(|m| m.get("ts"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        eprintln!(
+            "[slackers] fetched {} messages so far... (resume with --before {})",
+            all_messages.len(),
+            oldest_ts
+        );
+
+        // Slack conversations.history is Tier 3 (50 req/min).
+        // A small delay between pages avoids rate limiting on large channels.
+        tokio::time::sleep(Duration::from_millis(1200)).await;
     }
 
     Ok(all_messages)

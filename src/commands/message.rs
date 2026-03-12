@@ -377,12 +377,23 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     }
 
     let message_count = output_messages.len();
-    let output = json!({
+    // oldest_ts is the last element since Slack returns newest-first.
+    // Users can pass this to --before on a subsequent run to fetch older messages.
+    let resume_before = messages
+        .last()
+        .and_then(|m| m.get("ts"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
+    let mut output = json!({
         "channel": channel,
         "channel_id": channel_id,
         "message_count": message_count,
         "messages": output_messages,
     });
+    if let Some(ts) = resume_before {
+        output["resume_before"] = json!(ts);
+    }
 
     println!("{}", to_json_output(&output));
     Ok(())

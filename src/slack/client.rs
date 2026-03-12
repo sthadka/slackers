@@ -4,8 +4,9 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, COOKI
 use serde_json::Value;
 use std::time::Duration;
 
-const MAX_RETRIES: u32 = 3;
-const MAX_RETRY_DELAY_SECS: u64 = 30;
+const MAX_RETRIES: u32 = 10;
+const BASE_RETRY_DELAY_SECS: u64 = 5;
+const MAX_RETRY_DELAY_SECS: u64 = 60;
 
 pub struct SlackClient {
     http: reqwest::Client,
@@ -57,8 +58,8 @@ impl SlackClient {
             match result {
                 Ok(response) => return Ok(response),
                 Err(e) if attempt < MAX_RETRIES && is_rate_limit_error(&e) => {
-                    let delay = extract_retry_delay(&e).unwrap_or(1);
-                    let delay = delay.min(MAX_RETRY_DELAY_SECS);
+                    let delay = extract_retry_delay(&e, attempt);
+                    eprintln!("Rate limited; retrying in {}s (attempt {}/{})...", delay, attempt, MAX_RETRIES);
                     tokio::time::sleep(Duration::from_secs(delay)).await;
                     continue;
                 }
@@ -186,17 +187,15 @@ fn is_rate_limit_error(e: &SlackersError) -> bool {
         SlackersError::SlackApi {
             error_code: Some(code),
             ..
-        } if code == "rate_limited"
+        } if code == "rate_limited" || code == "ratelimited"
     )
 }
 
-fn extract_retry_delay(e: &SlackersError) -> Option<u64> {
-    // In a real implementation, we would extract from Retry-After header
-    // For now, use exponential backoff: 1, 2, 4 seconds
-    match e {
-        SlackersError::SlackApi { .. } => Some(2),
-        _ => None,
-    }
+fn extract_retry_delay(e: &SlackersError, attempt: u32) -> u64 {
+    // Exponential backoff: 5, 10, 20, 40, 60, 60, ... seconds
+    let _ = e;
+    let delay = BASE_RETRY_DELAY_SECS * (1u64 << (attempt - 1).min(3));
+    delay.min(MAX_RETRY_DELAY_SECS)
 }
 
 #[cfg(test)]
