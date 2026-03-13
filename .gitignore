@@ -47,3 +47,7 @@ Cargo.lock
 # Downloads from slackers
 ~/.config/slackers/tmp/
 ~/Library/Application Support/slackers/tmp/
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db

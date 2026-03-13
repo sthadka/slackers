@@ -56,7 +56,7 @@ slackers is a full-featured Slack CLI that provides complete workspace managemen
 ### From Source
 
 ```bash
-git clone https://github.com/yourusername/slackers.git
+git clone https://github.com/sthadka/slackers.git
 cd slackers
 cargo build --release
 ```
