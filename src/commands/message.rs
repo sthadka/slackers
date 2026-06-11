@@ -299,11 +299,32 @@ async fn handle_message_send(
     // Send message
     let response = client.api_call("chat.postMessage", params).await?;
 
+    let ts = response.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let channel_id = response.get("channel").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+    // Fetch permalink via chat.getPermalink
+    let permalink = if !ts.is_empty() && !channel_id.is_empty() {
+        let permalink_params = vec![
+            ("channel".to_string(), channel_id.clone()),
+            ("message_ts".to_string(), ts.clone()),
+        ];
+        match client.api_call("chat.getPermalink", permalink_params).await {
+            Ok(pl_resp) => pl_resp
+                .get("permalink")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     // Extract and output result
     let output = json!({
         "ok": true,
-        "ts": response.get("ts"),
-        "channel": response.get("channel")
+        "ts": ts,
+        "channel": channel_id,
+        "permalink": permalink
     });
 
     println!("{}", to_json_output(&output));
