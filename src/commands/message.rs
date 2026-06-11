@@ -4,6 +4,7 @@ use crate::cli::{MessageCommand, MessageDeleteOptions, MessageGetOptions, Messag
 use std::collections::{HashMap, HashSet};
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
+use crate::render::format::OutputFormat;
 use crate::slack::{
     download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary, get_user,
     resolve_channel_id, to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
@@ -279,6 +280,9 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         }
     }
 
+    // Determine output format
+    let fmt = OutputFormat::from_str(&options.format).unwrap_or_default();
+
     // Build output
     let mut output = json!({
         "channel_id": channel_id,
@@ -292,7 +296,25 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         }
     }
 
-    println!("{}", to_json_output(&output));
+    match fmt {
+        OutputFormat::Json => println!("{}", to_json_output(&output)),
+        _ => {
+            // For non-JSON formats, render the messages list as a table
+            let msgs = compact_messages;
+            let headers = ["ts", "user", "text"];
+            let rows: Vec<Vec<String>> = msgs
+                .iter()
+                .map(|m| {
+                    vec![
+                        m.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        m.get("user").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        m.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    ]
+                })
+                .collect();
+            println!("{}", fmt.render_rows(&headers, &rows));
+        }
+    }
     Ok(())
 }
 
@@ -789,6 +811,29 @@ async fn handle_thread_participants(
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use crate::render::format::{Formattable, OutputFormat};
+
+    /// Demonstrate that any serde::Serialize value (including message types)
+    /// can be formatted as Table or JSON via the Formattable blanket impl.
+    #[test]
+    fn test_message_formattable_table_vs_json() {
+        let msg = json!({
+            "ts": "1700000000.000001",
+            "user": "U123",
+            "text": "Hello world"
+        });
+
+        let json_out = msg.format(&OutputFormat::Json);
+        assert!(json_out.contains("\"ts\""), "JSON output should contain field 'ts'");
+        assert!(json_out.contains("Hello world"), "JSON output should contain message text");
+
+        let table_out = msg.format(&OutputFormat::Table);
+        assert!(table_out.contains("ts"), "Table output should contain key 'ts'");
+        assert!(table_out.contains("Hello world"), "Table output should contain message text");
+
+        // Table and JSON must differ in shape
+        assert_ne!(json_out, table_out, "Table and JSON outputs should differ");
+    }
 
     fn make_msg_with_reactions(ts: &str, reactions: &[&str]) -> serde_json::Value {
         let reaction_objs: Vec<serde_json::Value> = reactions

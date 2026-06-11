@@ -2,6 +2,7 @@ use crate::auth::resolve_auth;
 use crate::cli::SearchCommand;
 use crate::error::Result;
 use crate::output::to_json_output;
+use crate::render::format::OutputFormat;
 use crate::slack::{
     get_user, search_slack, AdvancedQueryFilters, ContentType, SearchKind, SearchOptions,
     SlackClient, SortOrder,
@@ -131,12 +132,37 @@ async fn handle_search_impl(
         json!(result.messages)
     };
 
+    // Determine output format
+    let fmt = OutputFormat::from_str(&options.format).unwrap_or_default();
+
     // Build output
     let output = json!({
         "messages": messages_value,
         "files": result.files,
     });
 
-    println!("{}", to_json_output(&output));
+    match fmt {
+        OutputFormat::Json => println!("{}", to_json_output(&output)),
+        _ => {
+            // For non-JSON formats, render messages as a table
+            let msgs: Vec<Value> = messages_value
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let headers = ["ts", "channel", "user", "text"];
+            let rows: Vec<Vec<String>> = msgs
+                .iter()
+                .map(|m| {
+                    vec![
+                        m.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        m.get("channel").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        m.get("user").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        m.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    ]
+                })
+                .collect();
+            println!("{}", fmt.render_rows(&headers, &rows));
+        }
+    }
     Ok(())
 }

@@ -482,6 +482,10 @@ pub struct MessageListOptions {
     #[arg(long)]
     pub workspace: Option<String>,
 
+    /// Output format: json (default), table, markdown, plain
+    #[arg(long, default_value = "json")]
+    pub format: String,
+
     /// Thread root ts (required when using #channel/channel id unless you pass --ts)
     #[arg(long)]
     pub thread_ts: Option<String>,
@@ -616,6 +620,10 @@ pub struct SearchOptions {
     #[arg(long)]
     pub workspace: Option<String>,
 
+    /// Output format: json (default), table, markdown, plain
+    #[arg(long, default_value = "json")]
+    pub format: String,
+
     /// Channel filter (#name, name, or id). Repeatable.
     #[arg(long)]
     pub channel: Vec<String>,
@@ -709,6 +717,10 @@ pub enum UserCommand {
         /// Include bot users
         #[arg(long)]
         include_bots: bool,
+
+        /// Output format: json (default), table, markdown, plain
+        #[arg(long, default_value = "json")]
+        format: String,
     },
 
     /// Get a single user by id (U...) or handle (@name)
@@ -749,6 +761,10 @@ pub enum ChannelCommand {
         /// Resolve user IDs to display names for DMs (im type)
         #[arg(long)]
         resolve_users: bool,
+
+        /// Output format: json (default), table, markdown, plain
+        #[arg(long, default_value = "json")]
+        format: String,
     },
 
     /// Get detailed information about a channel

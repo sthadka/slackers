@@ -2,6 +2,7 @@ use crate::auth::resolve_auth;
 use crate::cli::{ChannelCommand, ChannelInviteOptions, ChannelMarkOptions, ChannelMembersOptions, ChannelNewOptions};
 use crate::error::Result;
 use crate::output::to_json_output;
+use crate::render::format::OutputFormat;
 use crate::slack::{
     get_conversation_info, get_user, join_conversation, leave_conversation, list_conversations,
     SlackClient,
@@ -16,7 +17,8 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
             exclude_archived,
             limit,
             resolve_users,
-        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users).await,
+            format,
+        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users, &format).await,
         ChannelCommand::Get {
             channel,
             workspace,
@@ -43,6 +45,7 @@ async fn handle_channel_list(
     exclude_archived: bool,
     limit: u32,
     resolve_users: bool,
+    format: &str,
 ) -> Result<()> {
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
@@ -70,8 +73,28 @@ async fn handle_channel_list(
         }
     }
 
+    let fmt = OutputFormat::from_str(format).unwrap_or_default();
     let output = json!(channels);
-    println!("{}", to_json_output(&output));
+
+    match fmt {
+        OutputFormat::Json => println!("{}", to_json_output(&output)),
+        _ => {
+            let headers = ["id", "name", "type"];
+            let rows: Vec<Vec<String>> = channels
+                .iter()
+                .map(|ch| {
+                    let id = ch.id.clone();
+                    let name = ch.name.clone().unwrap_or_default();
+                    let kind = if ch.is_im == Some(true) { "dm" }
+                        else if ch.is_mpim == Some(true) { "mpim" }
+                        else if ch.is_private == Some(true) { "private" }
+                        else { "public" };
+                    vec![id, name, kind.to_string()]
+                })
+                .collect();
+            println!("{}", fmt.render_rows(&headers, &rows));
+        }
+    }
 
     Ok(())
 }
