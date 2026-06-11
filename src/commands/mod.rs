@@ -3,6 +3,7 @@ mod batch;
 mod canvas;
 mod channel;
 pub mod dm;
+pub mod export;
 pub mod file;
 mod message;
 pub mod mention;
