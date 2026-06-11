@@ -661,4 +661,21 @@ pub enum ChannelCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+
+    /// Mark a channel or DM as read up to a given message timestamp
+    Mark(ChannelMarkOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct ChannelMarkOptions {
+    /// Channel id (C...), DM id (D...), or #name/name
+    pub target: String,
+
+    /// Message timestamp to mark as read up to
+    #[arg(long)]
+    pub ts: String,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
 }

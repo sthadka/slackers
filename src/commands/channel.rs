@@ -1,5 +1,5 @@
 use crate::auth::resolve_auth;
-use crate::cli::ChannelCommand;
+use crate::cli::{ChannelCommand, ChannelMarkOptions};
 use crate::error::Result;
 use crate::output::to_json_output;
 use crate::slack::{
@@ -30,6 +30,7 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
         ChannelCommand::Leave { channel, workspace } => {
             handle_channel_leave(&channel, workspace.as_deref()).await
         }
+        ChannelCommand::Mark(opts) => handle_channel_mark(opts).await,
     }
 }
 
@@ -129,6 +130,23 @@ async fn handle_channel_leave(channel: &str, workspace: Option<&str>) -> Result<
         "ok": true,
         "channel": channel_id,
     });
+    println!("{}", to_json_output(&output));
+
+    Ok(())
+}
+
+async fn handle_channel_mark(opts: ChannelMarkOptions) -> Result<()> {
+    // Resolve auth
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    // Resolve channel name/id to a canonical channel ID
+    let channel_id = crate::slack::channels::resolve_channel_id(&client, &opts.target).await?;
+
+    // Mark the channel as read up to the given ts
+    client.mark_channel(&channel_id, &opts.ts).await?;
+
+    let output = json!({ "ok": true });
     println!("{}", to_json_output(&output));
 
     Ok(())

@@ -609,6 +609,22 @@ impl SlackClient {
         Ok(emoji_map)
     }
 
+    // =========================================================================
+    // channel mark: conversations.mark
+    // =========================================================================
+
+    /// Mark a channel or DM as read up to the given message timestamp.
+    ///
+    /// Calls `conversations.mark` with the provided channel ID and ts.
+    pub async fn mark_channel(&self, channel_id: &str, ts: &str) -> Result<()> {
+        let params = vec![
+            ("channel".to_string(), channel_id.to_string()),
+            ("ts".to_string(), ts.to_string()),
+        ];
+        self.api_call("conversations.mark", params).await?;
+        Ok(())
+    }
+
     /// Check if the API response indicates success
     fn check_api_response(body: Value) -> Result<Value> {
         if let Some(ok) = body.get("ok").and_then(|v| v.as_bool()) {
