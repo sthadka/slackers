@@ -95,6 +95,31 @@ Common options:
 - `--limit <n>` (default `20`)
 - `--max-content-chars <n>` (default `4000`, `-1` unlimited; messages only)
 
+## Messages — additional commands
+
+- `slackers message history <channel>`
+  - Fetch full channel history (all pages, resumable)
+  - Options:
+    - `--workspace <url>`
+    - `--limit <n>` (default `500`)
+    - `--after YYYY-MM-DD` / `--before YYYY-MM-DD`
+    - `--max-body-chars <n>` (default `8000`, `-1` unlimited)
+    - `--include-threads` (inline thread replies)
+    - `--include-reactions`
+    - `--output <file>` / `-o <file>` (default `<channel>-history.json`)
+
+- `slackers message thread-participants [<url>]`
+  - List unique participants in a thread with message counts
+  - Options:
+    - `--channel <C...>` + `--ts <ts>` (when not using a URL)
+    - `--workspace <url>`
+    - `--resolve-users`
+
+- `slackers message pin --channel <C...> --ts <ts> [--workspace <url>]`
+- `slackers message unpin --channel <C...> --ts <ts> [--workspace <url>]`
+- `slackers message delete --channel <C...> --ts <ts> [--workspace <url>]`
+- `slackers message update --channel <C...> --ts <ts> --text <text> [--workspace <url>]`
+
 ## Canvas
 
 - `slackers canvas get <canvas-url-or-id>`
@@ -106,3 +131,90 @@ Common options:
 
 - `slackers user list [--workspace <url>] [--limit <n>] [--cursor <cursor>] [--include-bots]`
 - `slackers user get <U...|@handle|handle> [--workspace <url>]`
+
+## Channels — additional commands
+
+- `slackers channel list`
+  - Additional options:
+    - `--resolve-users` (enrich DM listings with display names)
+
+- `slackers channel mark <target> --ts <ts> [--workspace <url>]`
+  - Mark a channel/DM as read up to the given message timestamp
+
+- `slackers channel members <target> [--resolve-users] [--workspace <url>]`
+  - List member user IDs (and optional display names) for a channel
+
+- `slackers channel new --name <name> [--private] [--workspace <url>]`
+  - Create a new public or private channel
+
+- `slackers channel invite <target> --users <U1,U2,...> [--workspace <url>]`
+  - Invite one or more users to a channel
+
+## Files
+
+- `slackers file upload --file <path> [--channels <C1,C2>] [--comment <text>] [--title <title>] [--filename <name>] [--workspace <url>]`
+- `slackers file delete --file-id <F...> [--workspace <url>]`
+- `slackers file list [--channel <C...>] [--limit <n>] [--workspace <url>]`
+
+## Workspace
+
+- `slackers workspace info [--workspace <url>]`
+  - Returns team id, name, domain, and icon URL
+
+## Emoji
+
+- `slackers emoji list [--workspace <url>]`
+  - Lists all custom emoji for the workspace
+
+## Direct Messages
+
+- `slackers dm open --users <U1,U2,...> [--workspace <url>]`
+  - Open a DM (or MPIM) conversation with one or more users; returns channel ID
+
+- `slackers dm send --users <U1,U2,...> --message <text> [--workspace <url>]`
+  - Open a DM and send a message in one step
+
+## Batch Operations
+
+- `slackers batch send --message <text> --channels <C1,C2,...> [--workspace <url>]`
+  - Send the same message to multiple channels
+
+- `slackers batch react --emoji <name> --messages <url1,url2,...>`
+  - Add a reaction to multiple messages
+
+## Later (Saved / Starred Messages)
+
+- `slackers later add --channel <C...> --ts <ts> [--workspace <url>]`
+- `slackers later remove --channel <C...> --ts <ts> [--workspace <url>]`
+- `slackers later list [--limit <n>] [--workspace <url>]`
+
+## Scheduled Messages
+
+- `slackers scheduled send --channel <C...> --message <text> --at <unix-ts|RFC3339> [--workspace <url>]`
+- `slackers scheduled list [--channel <C...>] [--workspace <url>]`
+- `slackers scheduled delete --channel <C...> --id <scheduled-message-id> [--workspace <url>]`
+
+## Mentions
+
+- `slackers mention list [--username <handle>] [--channel <channel...>] [--after YYYY-MM-DD] [--before YYYY-MM-DD] [--limit <n>] [--workspace <url>]`
+  - List messages that @mention you (or a named user)
+
+## Export
+
+- `slackers export channel --channel <C...|#name> [--format json|csv|html] [--output <file>] [--workspace <url>]`
+  - Export channel history in the requested format (default: json)
+
+## Output Format Flag
+
+Most list/tabular commands support `--format <fmt>` to control rendering:
+
+- `json` (default) — pretty-printed JSON with empty fields pruned
+- `table` — ASCII table via comfy-table
+- `markdown` — GitHub-flavoured Markdown table
+- `plain` — tab-separated or `key=value` lines
+
+```bash
+slackers message list <url> --format table
+slackers channel list --format markdown
+slackers search messages "deploy" --format json
+```

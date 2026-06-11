@@ -2,15 +2,19 @@
 name: slacker
 description: |
   Slack automation CLI for AI agents. Use when:
-  - Discovering channels in a workspace (list, search, get channel info)
-  - Managing channel membership (join, leave channels)
+  - Discovering channels in a workspace (list, search, get channel info, members)
+  - Managing channel membership (join, leave, invite, create channels)
   - Reading a Slack message or thread (given a URL or channel+ts)
   - Downloading Slack attachments (snippets, images, files) to local paths
-  - Searching Slack messages or files
-  - Sending a reply or adding a reaction
+  - Searching Slack messages or files (advanced filters: user, date, has:link, etc.)
+  - Sending a reply, DM, or batch messages; adding/removing reactions
   - Fetching a Slack canvas as markdown
-  - Looking up Slack users
-  Triggers: "slack channel", "list channels", "join channel", "slack message", "slack thread", "slack URL", "slack link", "read slack", "reply on slack", "search slack"
+  - Looking up Slack users, listing workspace users
+  - Uploading, listing, or deleting files
+  - Fetching workspace info, custom emoji, saved items, scheduled messages
+  - Monitoring mentions; exporting channel history
+  - Formatting output as JSON, table, markdown, or plain text (--format flag)
+  Triggers: "slack channel", "list channels", "join channel", "slack message", "slack thread", "slack URL", "slack link", "read slack", "reply on slack", "search slack", "slack DM", "slack file", "slack mention", "slack export", "slack workspace", "batch slack"
 ---
 
 # Slack automation with `slackers`
@@ -144,6 +148,98 @@ slackers channel leave "#random"
 ```
 
 **Performance tip:** Channel IDs (like `C0123456789`) are faster than names because Slack's API requires ID lookup. Use `channel list` first to get IDs, then use those IDs in subsequent commands.
+
+## Message management
+
+```bash
+# Pin / unpin / delete / update
+slackers message pin --channel C123 --ts 1700000000.000001
+slackers message delete --channel C123 --ts 1700000000.000001
+slackers message update --channel C123 --ts 1700000000.000001 --text "corrected text"
+
+# Thread participants
+slackers message thread-participants "https://workspace.slack.com/archives/C123/p1700000000000000"
+
+# Channel history (resumable, incremental)
+slackers message history "#general" --limit 500 --after 2026-01-01 --include-threads
+```
+
+## Direct messages
+
+```bash
+slackers dm open --users U123,U456
+slackers dm send --users U123 --message "Hey, can you review this?"
+```
+
+## Files
+
+```bash
+slackers file upload --file ./report.pdf --channels "#general" --title "Q2 Report"
+slackers file list --channel C123 --limit 50
+slackers file delete --file-id F123ABC
+```
+
+## Batch operations
+
+```bash
+# Send the same message to multiple channels
+slackers batch send --message "Maintenance tonight 22:00 UTC" --channels "#general,#ops"
+
+# Add a reaction to multiple messages
+slackers batch react --emoji rocket --messages "https://...url1,https://...url2"
+```
+
+## Mentions
+
+```bash
+# Messages that @mention the authenticated user
+slackers mention list --after 2026-01-01 --channel "#general"
+
+# Mentions of a specific user
+slackers mention list --username alice --limit 50
+```
+
+## Workspace / Emoji
+
+```bash
+slackers workspace info
+slackers emoji list
+```
+
+## Later (starred/saved messages)
+
+```bash
+slackers later add --channel C123 --ts 1700000000.000001
+slackers later list --limit 20
+slackers later remove --channel C123 --ts 1700000000.000001
+```
+
+## Scheduled messages
+
+```bash
+slackers scheduled send --channel C123 --message "Reminder!" --at "2026-12-31T09:00:00Z"
+slackers scheduled list
+slackers scheduled delete --channel C123 --id Q123
+```
+
+## Export
+
+```bash
+slackers export channel --channel "#general" --format json --output general-export.json
+slackers export channel --channel C123 --format csv
+```
+
+## Output format flag
+
+Most list/tabular commands support `--format`:
+
+```bash
+slackers channel list --format table
+slackers search messages "deploy" --format markdown
+slackers message list <url> --format plain
+```
+
+Supported values: `json` (default), `table`, `markdown`/`md`, `plain`/`text`.
 
 ## Canvas + Users
 

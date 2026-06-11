@@ -2,10 +2,29 @@
 
 ## Output format
 
-All commands print JSON to stdout.
+All commands print JSON to stdout by default.
 
 - Empty values are pruned (`null`, `[]`, `{}` are removed where possible).
 - `auth whoami` redacts secrets in its output.
+
+Pass `--format <fmt>` to list/tabular commands to change the output format:
+
+| Value      | Description                                  |
+| ---------- | -------------------------------------------- |
+| `json`     | Pretty-printed JSON (default)                |
+| `table`    | ASCII table (comfy-table)                    |
+| `markdown` | GitHub-flavoured Markdown table              |
+| `plain`    | `key=value` or tab-separated lines           |
+
+Aliases: `md` → `markdown`, `text` → `plain`.
+
+Example:
+
+```bash
+slackers message list <url> --format table
+slackers channel list --format markdown
+slackers search messages "deploy" --format plain
+```
 
 ## Message shapes (high-level)
 
