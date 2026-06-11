@@ -1,11 +1,12 @@
 mod auth;
+mod batch;
 mod canvas;
 mod channel;
 mod message;
 mod search;
 mod user;
 
-use crate::cli::Command;
+use crate::cli::{BatchCommand, Command};
 use crate::error::Result;
 
 pub async fn dispatch(command: Command) -> Result<()> {
@@ -28,6 +29,10 @@ pub async fn dispatch(command: Command) -> Result<()> {
         Command::Channel { subcommand } => {
             channel::handle_channel(subcommand).await
         }
+        Command::Batch { subcommand } => match subcommand {
+            BatchCommand::Send(options) => batch::handle_batch_send(options).await,
+            BatchCommand::React(options) => batch::handle_batch_react(options).await,
+        },
     }
 }
 

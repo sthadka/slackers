@@ -41,6 +41,50 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: ChannelCommand,
     },
+    /// Batch operations (send messages or add reactions to multiple targets)
+    Batch {
+        #[command(subcommand)]
+        subcommand: BatchCommand,
+    },
+}
+
+// ============================================================================
+// Batch Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum BatchCommand {
+    /// Send a message to multiple channels
+    Send(BatchSendOptions),
+
+    /// Add a reaction to multiple messages
+    React(BatchReactOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct BatchSendOptions {
+    /// Message text to send
+    #[arg(long)]
+    pub message: String,
+
+    /// Comma-separated list of channels (e.g. #general,#random or C123,C456)
+    #[arg(long, value_delimiter = ',')]
+    pub channels: Vec<String>,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct BatchReactOptions {
+    /// Emoji name to react with (:rocket:, rocket, or 🚀)
+    #[arg(long)]
+    pub emoji: String,
+
+    /// Comma-separated list of Slack message URLs
+    #[arg(long, value_delimiter = ',')]
+    pub messages: Vec<String>,
 }
 
 // ============================================================================
