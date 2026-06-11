@@ -3,6 +3,7 @@ use crate::error::{Result, SlackersError};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE, COOKIE, ORIGIN};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -38,6 +39,30 @@ pub struct ChatUpdateResponse {
     pub channel: String,
     pub ts: String,
     pub text: String,
+}
+
+/// Icon information returned as part of `team.info`
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkspaceIcon {
+    pub image_34: Option<String>,
+    pub image_44: Option<String>,
+    pub image_68: Option<String>,
+    pub image_88: Option<String>,
+    pub image_102: Option<String>,
+    pub image_132: Option<String>,
+    pub image_230: Option<String>,
+    pub image_default: Option<bool>,
+}
+
+/// Workspace (team) information returned by `team.info`
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkspaceInfo {
+    pub id: String,
+    pub name: String,
+    pub domain: String,
+    pub icon: Option<WorkspaceIcon>,
 }
 
 // =========================================================================
@@ -546,6 +571,44 @@ impl SlackClient {
         Ok(response)
     }
 
+    // =========================================================================
+    // Task 9.1: team.info / emoji.list
+    // =========================================================================
+
+    /// Fetch workspace (team) information via `team.info`.
+    ///
+    /// Returns a [`WorkspaceInfo`] struct with the workspace id, name, domain,
+    /// and icon URLs.
+    pub async fn get_workspace_info(&self) -> Result<WorkspaceInfo> {
+        let body = self.api_call("team.info", vec![]).await?;
+
+        let team = body
+            .get("team")
+            .ok_or_else(|| SlackersError::Other("No 'team' field in team.info response".to_string()))?;
+
+        let info: WorkspaceInfo = serde_json::from_value(team.clone())
+            .map_err(|e| SlackersError::Other(format!("Failed to parse WorkspaceInfo: {}", e)))?;
+
+        Ok(info)
+    }
+
+    /// List all custom emoji for the workspace via `emoji.list`.
+    ///
+    /// Returns a map of emoji name → URL (or an alias string such as
+    /// `"alias:other_emoji"`).  Aliases are included as-is.
+    pub async fn list_emojis(&self) -> Result<HashMap<String, String>> {
+        let body = self.api_call("emoji.list", vec![]).await?;
+
+        let emoji_value = body
+            .get("emoji")
+            .ok_or_else(|| SlackersError::Other("No 'emoji' field in emoji.list response".to_string()))?;
+
+        let emoji_map: HashMap<String, String> = serde_json::from_value(emoji_value.clone())
+            .map_err(|e| SlackersError::Other(format!("Failed to parse emoji map: {}", e)))?;
+
+        Ok(emoji_map)
+    }
+
     /// Check if the API response indicates success
     fn check_api_response(body: Value) -> Result<Value> {
         if let Some(ok) = body.get("ok").and_then(|v| v.as_bool()) {
@@ -697,6 +760,62 @@ mod tests {
         assert_eq!(decoded.channel, "C123");
         assert_eq!(decoded.ts, "1234567890.123456");
         assert_eq!(decoded.text, "Updated text");
+    }
+
+    // --- WorkspaceInfo deserialization ---
+
+    #[test]
+    fn test_workspace_info_deserialize() {
+        let json = serde_json::json!({
+            "id": "T12345",
+            "name": "Acme Corp",
+            "domain": "acme",
+            "icon": {
+                "image_34": "https://slack.com/icon_34.png",
+                "image_44": "https://slack.com/icon_44.png",
+                "image_68": null,
+                "image_88": null,
+                "image_102": null,
+                "image_132": null,
+                "image_230": null,
+                "image_default": true
+            }
+        });
+        let info: WorkspaceInfo = serde_json::from_value(json).unwrap();
+        assert_eq!(info.id, "T12345");
+        assert_eq!(info.name, "Acme Corp");
+        assert_eq!(info.domain, "acme");
+        let icon = info.icon.unwrap();
+        assert_eq!(icon.image_34.as_deref(), Some("https://slack.com/icon_34.png"));
+        assert_eq!(icon.image_default, Some(true));
+    }
+
+    #[test]
+    fn test_workspace_info_no_icon() {
+        let json = serde_json::json!({
+            "id": "T99999",
+            "name": "Test WS",
+            "domain": "testws"
+        });
+        let info: WorkspaceInfo = serde_json::from_value(json).unwrap();
+        assert_eq!(info.id, "T99999");
+        assert!(info.icon.is_none());
+    }
+
+    // --- emoji map deserialization ---
+
+    #[test]
+    fn test_emoji_map_deserialize() {
+        let json = serde_json::json!({
+            "party_parrot": "https://emoji.slack-edge.com/party_parrot.gif",
+            "wave": "alias:wave_anim"
+        });
+        let map: HashMap<String, String> = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            map.get("party_parrot").map(|s| s.as_str()),
+            Some("https://emoji.slack-edge.com/party_parrot.gif")
+        );
+        assert_eq!(map.get("wave").map(|s| s.as_str()), Some("alias:wave_anim"));
     }
 
     // --- ConversationOpenResponse serialization round-trip ---
