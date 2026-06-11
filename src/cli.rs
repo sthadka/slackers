@@ -445,6 +445,10 @@ pub struct MessageGetOptions {
     /// Include reactions + reacting users
     #[arg(long)]
     pub include_reactions: bool,
+
+    /// Resolve user IDs to display names via users.info
+    #[arg(long)]
+    pub resolve_users: bool,
 }
 
 #[derive(Args, Debug)]
@@ -504,6 +508,10 @@ pub struct MessageListOptions {
     /// Only show messages that do NOT have this reaction (emoji name, e.g. thumbsup)
     #[arg(long)]
     pub without_reaction: Option<String>,
+
+    /// Resolve user IDs to display names via users.info
+    #[arg(long)]
+    pub resolve_users: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -626,6 +634,10 @@ pub struct SearchOptions {
     /// Only results sent by the authenticated user (from:me)
     #[arg(long, default_value = "false")]
     pub from_me: bool,
+
+    /// Resolve user IDs to display names via users.info
+    #[arg(long)]
+    pub resolve_users: bool,
 }
 
 // ============================================================================

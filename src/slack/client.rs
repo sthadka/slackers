@@ -680,6 +680,150 @@ impl SlackClient {
         Ok(())
     }
 
+    // =========================================================================
+    // conversations.create / conversations.invite
+    // =========================================================================
+
+    /// Create a new Slack channel via `conversations.create`.
+    ///
+    /// `name`       – channel name (lowercase letters, numbers, hyphens, underscores)
+    /// `is_private` – whether to create a private channel
+    ///
+    /// Returns the full channel object from the API response.
+    pub async fn create_channel(&self, name: &str, is_private: bool) -> Result<Value> {
+        let params = vec![
+            ("name".to_string(), name.to_string()),
+            ("is_private".to_string(), is_private.to_string()),
+        ];
+        let body = self.api_call("conversations.create", params).await?;
+        let channel = body
+            .get("channel")
+            .ok_or_else(|| SlackersError::Other("No 'channel' field in conversations.create response".to_string()))?
+            .clone();
+        Ok(channel)
+    }
+
+    /// Invite users to an existing Slack channel via `conversations.invite`.
+    ///
+    /// `channel_id` – channel ID (C...)
+    /// `user_ids`   – list of user IDs to invite
+    ///
+    /// Returns the full channel object from the API response.
+    pub async fn invite_to_channel(&self, channel_id: &str, user_ids: &[String]) -> Result<Value> {
+        let users = user_ids.join(",");
+        let params = vec![
+            ("channel".to_string(), channel_id.to_string()),
+            ("users".to_string(), users),
+        ];
+        let body = self.api_call("conversations.invite", params).await?;
+        let channel = body
+            .get("channel")
+            .ok_or_else(|| SlackersError::Other("No 'channel' field in conversations.invite response".to_string()))?
+            .clone();
+        Ok(channel)
+    }
+
+    // =========================================================================
+    // stars.add / stars.remove / stars.list
+    // =========================================================================
+
+    /// Star (save for later) a message via `stars.add`.
+    ///
+    /// `channel_id` – channel ID containing the message
+    /// `ts`         – message timestamp
+    pub async fn star_message(&self, channel_id: &str, ts: &str) -> Result<()> {
+        let params = vec![
+            ("channel".to_string(), channel_id.to_string()),
+            ("timestamp".to_string(), ts.to_string()),
+        ];
+        self.api_call("stars.add", params).await?;
+        Ok(())
+    }
+
+    /// Unstar a message via `stars.remove`.
+    ///
+    /// `channel_id` – channel ID containing the message
+    /// `ts`         – message timestamp
+    pub async fn unstar_message(&self, channel_id: &str, ts: &str) -> Result<()> {
+        let params = vec![
+            ("channel".to_string(), channel_id.to_string()),
+            ("timestamp".to_string(), ts.to_string()),
+        ];
+        self.api_call("stars.remove", params).await?;
+        Ok(())
+    }
+
+    /// List starred items via `stars.list`.
+    ///
+    /// `limit` – max number of items to return
+    ///
+    /// Returns a vector of starred item objects.
+    pub async fn list_starred(&self, limit: usize) -> Result<Vec<Value>> {
+        let params = vec![
+            ("count".to_string(), limit.to_string()),
+        ];
+        let body = self.api_call("stars.list", params).await?;
+        let items = body
+            .get("items")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        Ok(items)
+    }
+
+    // =========================================================================
+    // chat.scheduleMessage / chat.scheduledMessages.list / chat.deleteScheduledMessage
+    // =========================================================================
+
+    /// Schedule a message to be sent later via `chat.scheduleMessage`.
+    ///
+    /// `channel`  – channel ID or name
+    /// `text`     – message text
+    /// `post_at`  – unix timestamp when to post
+    ///
+    /// Returns the API response body containing scheduled_message_id, post_at, channel.
+    pub async fn schedule_message(&self, channel: &str, text: &str, post_at: i64) -> Result<Value> {
+        let params = vec![
+            ("channel".to_string(), channel.to_string()),
+            ("text".to_string(), text.to_string()),
+            ("post_at".to_string(), post_at.to_string()),
+        ];
+        let body = self.api_call("chat.scheduleMessage", params).await?;
+        Ok(body)
+    }
+
+    /// List scheduled messages via `chat.scheduledMessages.list`.
+    ///
+    /// `channel` – optional channel ID to filter by
+    ///
+    /// Returns a vector of scheduled message objects.
+    pub async fn list_scheduled_messages(&self, channel: Option<&str>) -> Result<Vec<Value>> {
+        let mut params: Vec<(String, String)> = Vec::new();
+        if let Some(ch) = channel {
+            params.push(("channel".to_string(), ch.to_string()));
+        }
+        let body = self.api_call("chat.scheduledMessages.list", params).await?;
+        let messages = body
+            .get("scheduled_messages")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        Ok(messages)
+    }
+
+    /// Delete a scheduled message via `chat.deleteScheduledMessage`.
+    ///
+    /// `channel`              – channel ID
+    /// `scheduled_message_id` – the scheduled message ID to delete
+    pub async fn delete_scheduled_message(&self, channel: &str, scheduled_message_id: &str) -> Result<()> {
+        let params = vec![
+            ("channel".to_string(), channel.to_string()),
+            ("scheduled_message_id".to_string(), scheduled_message_id.to_string()),
+        ];
+        self.api_call("chat.deleteScheduledMessage", params).await?;
+        Ok(())
+    }
+
     /// Check if the API response indicates success
     fn check_api_response(body: Value) -> Result<Value> {
         if let Some(ok) = body.get("ok").and_then(|v| v.as_bool()) {
