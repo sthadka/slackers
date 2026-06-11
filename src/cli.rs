@@ -51,6 +51,16 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: FileCommand,
     },
+    /// Workspace information (team name, domain, icon)
+    Workspace {
+        #[command(subcommand)]
+        subcommand: WorkspaceCommand,
+    },
+    /// Emoji directory for the workspace
+    Emoji {
+        #[command(subcommand)]
+        subcommand: EmojiCommand,
+    },
 }
 
 // ============================================================================
@@ -675,6 +685,40 @@ pub struct ChannelMarkOptions {
     #[arg(long)]
     pub ts: String,
 
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Workspace Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum WorkspaceCommand {
+    /// Fetch workspace information (id, name, domain, icon)
+    Info(WorkspaceInfoOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct WorkspaceInfoOptions {
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Emoji Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum EmojiCommand {
+    /// List all custom emoji for the workspace
+    List(EmojiListOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct EmojiListOptions {
     /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]
     pub workspace: Option<String>,

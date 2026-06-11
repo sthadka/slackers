@@ -8,7 +8,7 @@ mod search;
 mod user;
 pub mod workspace;
 
-use crate::cli::{BatchCommand, Command};
+use crate::cli::{BatchCommand, Command, EmojiCommand, WorkspaceCommand};
 use crate::error::Result;
 
 pub async fn dispatch(command: Command) -> Result<()> {
@@ -38,6 +38,16 @@ pub async fn dispatch(command: Command) -> Result<()> {
         Command::File { subcommand } => {
             file::handle_file(subcommand).await
         }
+        Command::Workspace { subcommand } => match subcommand {
+            WorkspaceCommand::Info(opts) => {
+                workspace::handle_workspace_info(opts.workspace.as_deref()).await
+            }
+        },
+        Command::Emoji { subcommand } => match subcommand {
+            EmojiCommand::List(opts) => {
+                workspace::handle_emoji_list(opts.workspace.as_deref()).await
+            }
+        },
     }
 }
 
