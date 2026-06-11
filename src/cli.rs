@@ -199,6 +199,28 @@ pub enum MessageCommand {
         #[command(flatten)]
         options: MessageHistoryOptions,
     },
+
+    /// List unique participants in a thread with message counts
+    ThreadParticipants {
+        /// Slack thread URL, or omit and use --channel + --ts
+        target: Option<String>,
+
+        /// Channel ID (required when not using a URL target)
+        #[arg(long)]
+        channel: Option<String>,
+
+        /// Thread root ts (required when not using a URL target)
+        #[arg(long)]
+        ts: Option<String>,
+
+        /// Workspace URL (needed when you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+
+        /// Resolve user IDs to display names via users.info
+        #[arg(long)]
+        resolve_users: bool,
+    },
 }
 
 #[derive(Args, Debug)]

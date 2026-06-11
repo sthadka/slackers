@@ -140,6 +140,7 @@ pub async fn search_mentions(
         max_content_chars: options.max_content_chars,
         content_type: ContentType::Any,
         download: options.download,
+        sort: crate::slack::SortOrder::default(),
     };
 
     search_messages(client, messages_input).await
@@ -183,6 +184,7 @@ pub async fn search_slack(
             max_content_chars,
             content_type: content_type.clone(),
             download,
+            sort: crate::slack::SortOrder::default(),
         };
 
         let messages = search_messages(client, messages_input).await?;
@@ -196,6 +198,7 @@ pub async fn search_slack(
             query: &slack_query,
             limit,
             content_type: content_type.clone(),
+            sort: crate::slack::SortOrder::default(),
         };
 
         let files = search_files(client, files_input).await?;

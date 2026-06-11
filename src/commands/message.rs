@@ -1,6 +1,7 @@
 use crate::app_config::{load_app_config, load_history_cursors, save_history_cursors};
 use crate::auth::resolve_auth;
 use crate::cli::{MessageCommand, MessageGetOptions, MessageHistoryOptions, MessageListOptions, ReactCommand};
+use std::collections::HashMap;
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::slack::{
@@ -26,6 +27,22 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
         MessageCommand::React { subcommand } => handle_react(subcommand).await,
         MessageCommand::History { channel, options } => {
             handle_message_history(&channel, options).await
+        }
+        MessageCommand::ThreadParticipants {
+            target,
+            channel,
+            ts,
+            workspace,
+            resolve_users,
+        } => {
+            handle_thread_participants(
+                target.as_deref(),
+                channel.as_deref(),
+                ts.as_deref(),
+                workspace.as_deref(),
+                resolve_users,
+            )
+            .await
         }
     }
 }
@@ -652,6 +669,95 @@ fn apply_config_filters(
             true
         })
         .collect()
+}
+
+async fn handle_thread_participants(
+    target: Option<&str>,
+    channel_arg: Option<&str>,
+    ts_arg: Option<&str>,
+    workspace: Option<&str>,
+    resolve_users: bool,
+) -> Result<()> {
+    // Resolve channel_id and thread_ts from either a URL target or explicit flags
+    let (channel_id, thread_ts, workspace_url) = if let Some(url) = target {
+        let msg_target = parse_msg_target(url)?;
+        match msg_target {
+            MsgTarget::Url(msg_ref) => {
+                let ts = msg_ref
+                    .thread_ts_hint
+                    .clone()
+                    .unwrap_or_else(|| msg_ref.message_ts.clone());
+                (msg_ref.channel_id.clone(), ts, Some(msg_ref.workspace_url.clone()))
+            }
+            MsgTarget::Channel(ch) => {
+                let ts = ts_arg
+                    .ok_or_else(|| SlackersError::Other("--ts required when target is a channel ID".to_string()))?
+                    .to_string();
+                (ch, ts, workspace.map(|s| s.to_string()))
+            }
+        }
+    } else {
+        let ch = channel_arg
+            .ok_or_else(|| SlackersError::Other("--channel required when no URL target is given".to_string()))?
+            .to_string();
+        let ts = ts_arg
+            .ok_or_else(|| SlackersError::Other("--ts required when no URL target is given".to_string()))?
+            .to_string();
+        (ch, ts, workspace.map(|s| s.to_string()))
+    };
+
+    // Resolve auth
+    let auth_result = resolve_auth(workspace_url.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    // Fetch thread messages
+    let messages = fetch_thread(&client, &channel_id, &thread_ts).await?;
+
+    // Count messages per user
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    for msg in &messages {
+        if let Some(user) = msg.get("user").and_then(|v| v.as_str()) {
+            *counts.entry(user.to_string()).or_insert(0) += 1;
+        }
+    }
+
+    // Build participant list sorted by message count descending
+    let mut participants: Vec<(String, u32)> = counts.into_iter().collect();
+    participants.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Optionally resolve user names
+    let mut output_participants: Vec<Value> = Vec::new();
+    for (user_id, count) in participants {
+        let mut entry = json!({
+            "user_id": user_id,
+            "message_count": count
+        });
+        if resolve_users {
+            match crate::slack::get_user(&client, &user_id).await {
+                Ok(user) => {
+                    let display = user
+                        .display_name
+                        .or(user.real_name)
+                        .or(user.name)
+                        .unwrap_or_else(|| user_id.clone());
+                    if let Some(obj) = entry.as_object_mut() {
+                        obj.insert("name".to_string(), json!(display));
+                    }
+                }
+                Err(_) => {} // Best-effort; skip if lookup fails
+            }
+        }
+        output_participants.push(entry);
+    }
+
+    let output = json!({
+        "channel_id": channel_id,
+        "thread_ts": thread_ts,
+        "participants": output_participants
+    });
+
+    println!("{}", to_json_output(&output));
+    Ok(())
 }
 
 #[cfg(test)]
