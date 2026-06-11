@@ -6,6 +6,7 @@ pub mod file;
 mod message;
 mod search;
 mod user;
+pub mod workspace;
 
 use crate::cli::{BatchCommand, Command};
 use crate::error::Result;
