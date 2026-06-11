@@ -1,11 +1,11 @@
 use crate::app_config::{load_app_config, load_history_cursors, save_history_cursors};
 use crate::auth::resolve_auth;
 use crate::cli::{MessageCommand, MessageDeleteOptions, MessageGetOptions, MessageHistoryOptions, MessageListOptions, MessagePinOptions, MessageUnpinOptions, MessageUpdateOptions, ReactCommand};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::slack::{
-    download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary,
+    download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary, get_user,
     resolve_channel_id, to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
@@ -152,6 +152,13 @@ async fn handle_message_get(target: &str, options: MessageGetOptions) -> Result<
         }
     }
 
+    // Resolve user IDs to display names if requested
+    if options.resolve_users {
+        let msgs_slice = std::slice::from_ref(&output);
+        let user_map = build_user_map(&client, msgs_slice).await;
+        enrich_message_with_user_name(&mut output, &user_map);
+    }
+
     println!("{}", to_json_output(&output));
     Ok(())
 }
@@ -261,6 +268,14 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
                     }
                 }
             }
+        }
+    }
+
+    // Resolve user IDs to display names if requested
+    if options.resolve_users {
+        let user_map = build_user_map(&client, &compact_messages).await;
+        for msg in &mut compact_messages {
+            enrich_message_with_user_name(msg, &user_map);
         }
     }
 
@@ -861,6 +876,45 @@ async fn handle_message_update(opts: MessageUpdateOptions) -> Result<()> {
     let resp = client.update_message(&opts.channel, &opts.ts, &opts.text).await?;
     println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "text": resp.text })));
     Ok(())
+}
+
+/// Collect all unique user IDs from a slice of compact-message JSON values,
+/// resolve them to display names via `users.info`, and return a map from
+/// user-ID to display name.  Look-up failures are silently skipped so the
+/// rest of the output is unaffected.
+async fn build_user_map(client: &SlackClient, messages: &[serde_json::Value]) -> HashMap<String, String> {
+    // Collect unique user IDs
+    let ids: HashSet<String> = messages
+        .iter()
+        .filter_map(|m| m.get("user").and_then(|v| v.as_str()).map(|s| s.to_string()))
+        .collect();
+
+    let mut map = HashMap::new();
+    for uid in ids {
+        if let Ok(user) = get_user(client, &uid).await {
+            let name = user
+                .display_name
+                .filter(|s| !s.is_empty())
+                .or(user.real_name)
+                .or(user.name)
+                .unwrap_or_else(|| uid.clone());
+            map.insert(uid, name);
+        }
+    }
+    map
+}
+
+/// Apply a user-ID → display-name map to a mutable JSON value.
+/// Replaces `"user": "U..."` with `"user_name": "<display name>"` (keeps the
+/// original `"user"` field intact so callers can still access the raw ID).
+fn enrich_message_with_user_name(msg: &mut serde_json::Value, user_map: &HashMap<String, String>) {
+    if let Some(obj) = msg.as_object_mut() {
+        if let Some(uid) = obj.get("user").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+            if let Some(name) = user_map.get(&uid) {
+                obj.insert("user_name".to_string(), serde_json::json!(name));
+            }
+        }
+    }
 }
 
 /// Convert a YYYY-MM-DD string to a Unix timestamp string for the Slack API.
