@@ -183,6 +183,10 @@ pub enum MessageCommand {
         /// Thread root ts to post into (optional)
         #[arg(long)]
         thread_ts: Option<String>,
+
+        /// Also broadcast the threaded reply to the channel (reply_broadcast)
+        #[arg(long)]
+        reply_broadcast: bool,
     },
 
     /// Add or remove reactions

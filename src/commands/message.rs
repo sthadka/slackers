@@ -23,7 +23,8 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
             text,
             workspace,
             thread_ts,
-        } => handle_message_send(&target, &text, workspace.as_deref(), thread_ts.as_deref()).await,
+            reply_broadcast,
+        } => handle_message_send(&target, &text, workspace.as_deref(), thread_ts.as_deref(), reply_broadcast).await,
         MessageCommand::React { subcommand } => handle_react(subcommand).await,
         MessageCommand::History { channel, options } => {
             handle_message_history(&channel, options).await
@@ -281,6 +282,7 @@ async fn handle_message_send(
     text: &str,
     workspace: Option<&str>,
     thread_ts: Option<&str>,
+    reply_broadcast: bool,
 ) -> Result<()> {
     // Parse target
     let msg_target = parse_msg_target(target)?;
@@ -311,6 +313,11 @@ async fn handle_message_send(
     // Add thread_ts if provided or auto-detected
     if let Some(ts) = thread_ts.or(auto_thread_ts.as_deref()) {
         params.push(("thread_ts".to_string(), ts.to_string()));
+    }
+
+    // Add reply_broadcast if requested
+    if reply_broadcast {
+        params.push(("reply_broadcast".to_string(), "true".to_string()));
     }
 
     // Send message
