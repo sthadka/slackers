@@ -2,6 +2,7 @@ mod auth;
 mod batch;
 mod canvas;
 mod channel;
+pub mod file;
 mod message;
 mod search;
 mod user;
@@ -33,6 +34,9 @@ pub async fn dispatch(command: Command) -> Result<()> {
             BatchCommand::Send(options) => batch::handle_batch_send(options).await,
             BatchCommand::React(options) => batch::handle_batch_react(options).await,
         },
+        Command::File { subcommand } => {
+            file::handle_file(subcommand).await
+        }
     }
 }
 

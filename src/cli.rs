@@ -46,6 +46,80 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: BatchCommand,
     },
+    /// Upload, delete, or list Slack files
+    File {
+        #[command(subcommand)]
+        subcommand: FileCommand,
+    },
+}
+
+// ============================================================================
+// File Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum FileCommand {
+    /// Upload a file to Slack
+    Upload(FileUploadOptions),
+
+    /// Delete a file by ID
+    Delete(FileDeleteOptions),
+
+    /// List files in the workspace or a channel
+    List(FileListOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct FileUploadOptions {
+    /// Local path of the file to upload
+    #[arg(long)]
+    pub file: String,
+
+    /// Comma-separated list of channel IDs or names to share the file into
+    #[arg(long, value_delimiter = ',')]
+    pub channels: Option<Vec<String>>,
+
+    /// Initial comment to accompany the file
+    #[arg(long)]
+    pub comment: Option<String>,
+
+    /// Display title for the file in Slack
+    #[arg(long)]
+    pub title: Option<String>,
+
+    /// Override the on-disk filename shown in Slack
+    #[arg(long)]
+    pub filename: Option<String>,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct FileDeleteOptions {
+    /// Slack file ID (F...)
+    #[arg(long)]
+    pub file_id: String,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct FileListOptions {
+    /// Filter by channel ID (C...)
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Max number of files to return (default 100)
+    #[arg(long, default_value = "100")]
+    pub limit: u32,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
 }
 
 // ============================================================================
