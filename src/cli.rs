@@ -61,6 +61,11 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: EmojiCommand,
     },
+    /// Save messages for later (stars) and list saved items
+    Later {
+        #[command(subcommand)]
+        subcommand: LaterCommand,
+    },
 }
 
 // ============================================================================
@@ -859,6 +864,63 @@ pub enum EmojiCommand {
 
 #[derive(Args, Debug)]
 pub struct EmojiListOptions {
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Later Commands (starred / saved-for-later messages)
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum LaterCommand {
+    /// Star (save for later) a message
+    Add(LaterAddOptions),
+
+    /// Unstar (remove from saved) a message
+    Remove(LaterRemoveOptions),
+
+    /// List starred (saved for later) items
+    List(LaterListOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct LaterAddOptions {
+    /// Channel ID containing the message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message timestamp
+    #[arg(long)]
+    pub ts: String,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct LaterRemoveOptions {
+    /// Channel ID containing the message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message timestamp
+    #[arg(long)]
+    pub ts: String,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct LaterListOptions {
+    /// Maximum number of starred items to return (default 100)
+    #[arg(long, default_value = "100")]
+    pub limit: usize,
+
     /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]
     pub workspace: Option<String>,
