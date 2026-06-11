@@ -12,6 +12,10 @@ pub struct CompactChannel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_channel: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_private: Option<bool>,
@@ -153,6 +157,11 @@ fn to_compact_channel(channel: &Value) -> CompactChannel {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
 
+    let user = channel
+        .get("user")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+
     let is_channel = channel.get("is_channel").and_then(|v| v.as_bool());
     let is_private = channel.get("is_private").and_then(|v| v.as_bool());
     let is_im = channel.get("is_im").and_then(|v| v.as_bool());
@@ -184,6 +193,8 @@ fn to_compact_channel(channel: &Value) -> CompactChannel {
     CompactChannel {
         id,
         name,
+        user,
+        user_name: None,
         is_channel,
         is_private,
         is_im,

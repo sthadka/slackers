@@ -3,7 +3,8 @@ use crate::cli::ChannelCommand;
 use crate::error::Result;
 use crate::output::to_json_output;
 use crate::slack::{
-    get_conversation_info, join_conversation, leave_conversation, list_conversations, SlackClient,
+    get_conversation_info, get_user, join_conversation, leave_conversation, list_conversations,
+    SlackClient,
 };
 use serde_json::json;
 
@@ -14,7 +15,8 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
             types,
             exclude_archived,
             limit,
-        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit).await,
+            resolve_users,
+        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users).await,
         ChannelCommand::Get {
             channel,
             workspace,
@@ -36,13 +38,12 @@ async fn handle_channel_list(
     types: Option<Vec<String>>,
     exclude_archived: bool,
     limit: u32,
+    resolve_users: bool,
 ) -> Result<()> {
-    // Resolve auth
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
-    // List conversations
-    let channels = list_conversations(
+    let mut channels = list_conversations(
         &client,
         types,
         exclude_archived,
@@ -50,7 +51,21 @@ async fn handle_channel_list(
     )
     .await?;
 
-    // Output as JSON array
+    if resolve_users {
+        for ch in &mut channels {
+            if ch.is_im == Some(true) {
+                if let Some(ref uid) = ch.user.clone() {
+                    if let Ok(u) = get_user(&client, uid).await {
+                        ch.user_name = u.display_name
+                            .filter(|s| !s.is_empty())
+                            .or(u.real_name)
+                            .or(u.name);
+                    }
+                }
+            }
+        }
+    }
+
     let output = json!(channels);
     println!("{}", to_json_output(&output));
 

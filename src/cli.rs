@@ -454,6 +454,10 @@ pub enum ChannelCommand {
         /// Max channels (default 200)
         #[arg(long, default_value = "200")]
         limit: u32,
+
+        /// Resolve user IDs to display names for DMs (im type)
+        #[arg(long)]
+        resolve_users: bool,
     },
 
     /// Get detailed information about a channel
