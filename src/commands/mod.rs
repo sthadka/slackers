@@ -7,11 +7,13 @@ pub mod export;
 pub mod file;
 mod message;
 pub mod mention;
+pub mod later;
+pub mod scheduled;
 mod search;
 mod user;
 pub mod workspace;
 
-use crate::cli::{BatchCommand, Command, EmojiCommand, WorkspaceCommand};
+use crate::cli::{BatchCommand, Command, EmojiCommand, LaterCommand, WorkspaceCommand};
 use crate::error::Result;
 
 pub async fn dispatch(command: Command) -> Result<()> {
@@ -51,6 +53,14 @@ pub async fn dispatch(command: Command) -> Result<()> {
                 workspace::handle_emoji_list(opts.workspace.as_deref()).await
             }
         },
+        Command::Later { subcommand } => match subcommand {
+            LaterCommand::Add(opts) => later::handle_later_add(opts).await,
+            LaterCommand::Remove(opts) => later::handle_later_remove(opts).await,
+            LaterCommand::List(opts) => later::handle_later_list(opts).await,
+        },
+        Command::Scheduled { subcommand } => {
+            scheduled::handle_scheduled(subcommand).await
+        }
     }
 }
 

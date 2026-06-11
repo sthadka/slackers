@@ -66,6 +66,11 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: LaterCommand,
     },
+    /// Schedule, list, and delete scheduled messages
+    Scheduled {
+        #[command(subcommand)]
+        subcommand: ScheduledCommand,
+    },
 }
 
 // ============================================================================
@@ -920,6 +925,67 @@ pub struct LaterListOptions {
     /// Maximum number of starred items to return (default 100)
     #[arg(long, default_value = "100")]
     pub limit: usize,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Scheduled Message Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum ScheduledCommand {
+    /// Schedule a message to be sent at a future time
+    Send(MessageScheduleOptions),
+
+    /// List scheduled messages (optionally filtered by channel)
+    List(MessageScheduledListOptions),
+
+    /// Delete a scheduled message
+    Delete(MessageScheduledDeleteOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct MessageScheduleOptions {
+    /// Channel ID or name to send the message to
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message text to schedule
+    #[arg(long)]
+    pub message: String,
+
+    /// Unix timestamp or RFC3339 datetime when to post the message
+    #[arg(long)]
+    pub at: String,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct MessageScheduledListOptions {
+    /// Filter by channel ID or name (optional)
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct MessageScheduledDeleteOptions {
+    /// Channel ID containing the scheduled message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Scheduled message ID to delete
+    #[arg(long)]
+    pub id: String,
 
     /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]
