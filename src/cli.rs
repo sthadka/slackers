@@ -71,6 +71,21 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: ScheduledCommand,
     },
+    /// Open and send direct messages
+    Dm {
+        #[command(subcommand)]
+        subcommand: DmCommand,
+    },
+    /// List messages that @mention you or a user
+    Mention {
+        #[command(subcommand)]
+        subcommand: MentionCommand,
+    },
+    /// Export channel history in various formats
+    Export {
+        #[command(subcommand)]
+        subcommand: ExportCommand,
+    },
 }
 
 // ============================================================================
@@ -988,6 +1003,111 @@ pub struct MessageScheduledDeleteOptions {
     pub id: String,
 
     /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// DM Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum DmCommand {
+    /// Open a direct message conversation with one or more users
+    Open(DmOpenOptions),
+
+    /// Open a DM and send a message
+    Send(DmSendOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct DmOpenOptions {
+    /// Comma-separated list of user IDs to open a DM with
+    #[arg(long, value_delimiter = ',')]
+    pub users: Vec<String>,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct DmSendOptions {
+    /// Comma-separated list of user IDs to open a DM with
+    #[arg(long, value_delimiter = ',')]
+    pub users: Vec<String>,
+
+    /// Message text to send
+    #[arg(long)]
+    pub message: String,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Mention Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum MentionCommand {
+    /// List messages that @mention you or a named user
+    List(MentionListOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct MentionListOptions {
+    /// Username to search for mentions of (defaults to authenticated user)
+    #[arg(long)]
+    pub username: Option<String>,
+
+    /// Channel filter (#name, name, or id). Repeatable.
+    #[arg(long)]
+    pub channel: Vec<String>,
+
+    /// Only results after YYYY-MM-DD
+    #[arg(long)]
+    pub after: Option<String>,
+
+    /// Only results before YYYY-MM-DD
+    #[arg(long)]
+    pub before: Option<String>,
+
+    /// Max results (default 20)
+    #[arg(long, default_value = "20")]
+    pub limit: usize,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Export Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum ExportCommand {
+    /// Export channel history
+    Channel(ExportChannelOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct ExportChannelOptions {
+    /// Channel id (C...) or #name/name
+    #[arg(long)]
+    pub channel: String,
+
+    /// Output format: json, csv, or html (default json)
+    #[arg(long, default_value = "json")]
+    pub format: String,
+
+    /// Output file path (defaults to stdout)
+    #[arg(long)]
+    pub output: Option<String>,
+
+    /// Workspace URL (needed when you have multiple workspaces)
     #[arg(long)]
     pub workspace: Option<String>,
 }

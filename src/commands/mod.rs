@@ -13,7 +13,7 @@ mod search;
 mod user;
 pub mod workspace;
 
-use crate::cli::{BatchCommand, Command, EmojiCommand, LaterCommand, WorkspaceCommand};
+use crate::cli::{BatchCommand, Command, DmCommand, EmojiCommand, ExportCommand, LaterCommand, MentionCommand, WorkspaceCommand};
 use crate::error::Result;
 
 pub async fn dispatch(command: Command) -> Result<()> {
@@ -61,6 +61,34 @@ pub async fn dispatch(command: Command) -> Result<()> {
         Command::Scheduled { subcommand } => {
             scheduled::handle_scheduled(subcommand).await
         }
+        Command::Dm { subcommand } => match subcommand {
+            DmCommand::Open(opts) => dm::handle_dm_open(opts.workspace.as_deref(), opts.users).await,
+            DmCommand::Send(opts) => dm::handle_dm_send(opts.workspace.as_deref(), opts.users, opts.message).await,
+        },
+        Command::Mention { subcommand } => match subcommand {
+            MentionCommand::List(opts) => {
+                mention::handle_mention_list(
+                    opts.workspace.as_deref(),
+                    opts.username,
+                    opts.channel,
+                    opts.after,
+                    opts.before,
+                    opts.limit,
+                )
+                .await
+            }
+        },
+        Command::Export { subcommand } => match subcommand {
+            ExportCommand::Channel(opts) => {
+                export::run_export(
+                    &opts.channel,
+                    &opts.format,
+                    opts.output.as_deref(),
+                    opts.workspace.as_deref(),
+                )
+                .await
+            }
+        },
     }
 }
 
