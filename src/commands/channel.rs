@@ -1,5 +1,5 @@
 use crate::auth::resolve_auth;
-use crate::cli::{ChannelCommand, ChannelMarkOptions};
+use crate::cli::{ChannelCommand, ChannelMarkOptions, ChannelMembersOptions};
 use crate::error::Result;
 use crate::output::to_json_output;
 use crate::slack::{
@@ -31,6 +31,7 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
             handle_channel_leave(&channel, workspace.as_deref()).await
         }
         ChannelCommand::Mark(opts) => handle_channel_mark(opts).await,
+        ChannelCommand::Members(opts) => handle_channel_members(opts).await,
     }
 }
 
@@ -147,6 +148,47 @@ async fn handle_channel_mark(opts: ChannelMarkOptions) -> Result<()> {
     client.mark_channel(&channel_id, &opts.ts).await?;
 
     let output = json!({ "ok": true });
+    println!("{}", to_json_output(&output));
+
+    Ok(())
+}
+
+async fn handle_channel_members(opts: ChannelMembersOptions) -> Result<()> {
+    // Resolve auth
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    // Resolve channel name → ID
+    let channel_id = crate::slack::channels::resolve_channel_id(&client, &opts.target).await?;
+
+    // Fetch member IDs
+    let member_ids = client.list_channel_members(&channel_id, None).await?;
+    let member_count = member_ids.len();
+
+    // Optionally resolve user IDs to display names
+    let mut members: Vec<serde_json::Value> = Vec::new();
+    for user_id in &member_ids {
+        let mut entry = json!({ "user_id": user_id });
+        if opts.resolve_users {
+            if let Ok(user) = get_user(&client, user_id).await {
+                let name = user
+                    .display_name
+                    .filter(|s| !s.is_empty())
+                    .or(user.real_name)
+                    .or(user.name);
+                if let Some(n) = name {
+                    entry["name"] = json!(n);
+                }
+            }
+        }
+        members.push(entry);
+    }
+
+    let output = json!({
+        "channel_id": channel_id,
+        "member_count": member_count,
+        "members": members,
+    });
     println!("{}", to_json_output(&output));
 
     Ok(())

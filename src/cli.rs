@@ -750,6 +750,23 @@ pub enum ChannelCommand {
 
     /// Mark a channel or DM as read up to a given message timestamp
     Mark(ChannelMarkOptions),
+
+    /// List members of a channel
+    Members(ChannelMembersOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct ChannelMembersOptions {
+    /// Channel id (C...) or #name/name
+    pub target: String,
+
+    /// Resolve user IDs to display names via users.info
+    #[arg(long)]
+    pub resolve_users: bool,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
 }
 
 #[derive(Args, Debug)]

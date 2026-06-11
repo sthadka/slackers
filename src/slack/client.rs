@@ -572,6 +572,61 @@ impl SlackClient {
     }
 
     // =========================================================================
+    // conversations.members
+    // =========================================================================
+
+    /// List all member user IDs for a channel via `conversations.members`.
+    ///
+    /// Handles pagination automatically and returns a flat `Vec<String>` of
+    /// user IDs.  Pass `limit` to control page size (max 1000, default 200).
+    pub async fn list_channel_members(
+        &self,
+        channel_id: &str,
+        limit: Option<u32>,
+    ) -> Result<Vec<String>> {
+        let page_size = limit.unwrap_or(200).to_string();
+        let mut members: Vec<String> = Vec::new();
+        let mut cursor: Option<String> = None;
+
+        loop {
+            let mut params = vec![
+                ("channel".to_string(), channel_id.to_string()),
+                ("limit".to_string(), page_size.clone()),
+            ];
+            if let Some(ref c) = cursor {
+                params.push(("cursor".to_string(), c.clone()));
+            }
+
+            let body = self.api_call("conversations.members", params).await?;
+
+            let page: Vec<String> = body
+                .get("members")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            members.extend(page);
+
+            cursor = body
+                .get("response_metadata")
+                .and_then(|m| m.get("next_cursor"))
+                .and_then(|c| c.as_str())
+                .filter(|c| !c.is_empty())
+                .map(|c| c.to_string());
+
+            if cursor.is_none() {
+                break;
+            }
+        }
+
+        Ok(members)
+    }
+
+    // =========================================================================
     // Task 9.1: team.info / emoji.list
     // =========================================================================
 
