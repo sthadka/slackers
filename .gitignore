@@ -54,3 +54,6 @@ Cargo.lock
 
 # Beads / Dolt files (added by bd init)
 .beads-credential-key
+
+# TreeFlow context (auto-added)
+.beads/
