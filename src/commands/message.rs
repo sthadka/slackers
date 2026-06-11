@@ -1,6 +1,6 @@
 use crate::app_config::{load_app_config, load_history_cursors, save_history_cursors};
 use crate::auth::resolve_auth;
-use crate::cli::{MessageCommand, MessageGetOptions, MessageHistoryOptions, MessageListOptions, ReactCommand};
+use crate::cli::{MessageCommand, MessageDeleteOptions, MessageGetOptions, MessageHistoryOptions, MessageListOptions, MessagePinOptions, MessageUnpinOptions, MessageUpdateOptions, ReactCommand};
 use std::collections::HashMap;
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
@@ -45,6 +45,10 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
             )
             .await
         }
+        MessageCommand::Pin(opts) => handle_message_pin(opts).await,
+        MessageCommand::Unpin(opts) => handle_message_unpin(opts).await,
+        MessageCommand::Delete(opts) => handle_message_delete(opts).await,
+        MessageCommand::Update(opts) => handle_message_update(opts).await,
     }
 }
 
@@ -825,6 +829,38 @@ mod tests {
         assert_eq!(filtered[0]["ts"], "2.0");
         assert_eq!(filtered[1]["ts"], "3.0");
     }
+}
+
+async fn handle_message_pin(opts: MessagePinOptions) -> Result<()> {
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+    client.pin_message(&opts.channel, &opts.ts).await?;
+    println!("{}", to_json_output(&json!({ "ok": true })));
+    Ok(())
+}
+
+async fn handle_message_unpin(opts: MessageUnpinOptions) -> Result<()> {
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+    client.unpin_message(&opts.channel, &opts.ts).await?;
+    println!("{}", to_json_output(&json!({ "ok": true })));
+    Ok(())
+}
+
+async fn handle_message_delete(opts: MessageDeleteOptions) -> Result<()> {
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+    client.delete_message(&opts.channel, &opts.ts).await?;
+    println!("{}", to_json_output(&json!({ "ok": true })));
+    Ok(())
+}
+
+async fn handle_message_update(opts: MessageUpdateOptions) -> Result<()> {
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+    let resp = client.update_message(&opts.channel, &opts.ts, &opts.text).await?;
+    println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "text": resp.text })));
+    Ok(())
 }
 
 /// Convert a YYYY-MM-DD string to a Unix timestamp string for the Slack API.

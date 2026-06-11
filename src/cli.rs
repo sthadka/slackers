@@ -309,6 +309,82 @@ pub enum MessageCommand {
         #[arg(long)]
         resolve_users: bool,
     },
+
+    /// Pin a message to a channel
+    Pin(MessagePinOptions),
+
+    /// Unpin a message from a channel
+    Unpin(MessageUnpinOptions),
+
+    /// Delete a message
+    Delete(MessageDeleteOptions),
+
+    /// Update the text of an existing message
+    Update(MessageUpdateOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct MessagePinOptions {
+    /// Channel ID (C...) that contains the message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message timestamp (unique message ID)
+    #[arg(long)]
+    pub ts: String,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct MessageUnpinOptions {
+    /// Channel ID (C...) that contains the message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message timestamp (unique message ID)
+    #[arg(long)]
+    pub ts: String,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct MessageDeleteOptions {
+    /// Channel ID (C...) that contains the message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message timestamp (unique message ID)
+    #[arg(long)]
+    pub ts: String,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct MessageUpdateOptions {
+    /// Channel ID (C...) that contains the message
+    #[arg(long)]
+    pub channel: String,
+
+    /// Message timestamp (unique message ID)
+    #[arg(long)]
+    pub ts: String,
+
+    /// New text for the message
+    #[arg(long)]
+    pub text: String,
+
+    /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
 }
 
 #[derive(Args, Debug)]
