@@ -22,7 +22,9 @@ pub use messages::{
     fetch_message, fetch_thread, filter_messages, get_thread_summary, to_compact_message,
     CompactMessageOptions, CompactSlackMessage, MessageFilter,
 };
-pub use search::{search_slack, SearchKind, SearchOptions};
+pub use search::{
+    mentions_query_token, search_mentions, search_slack, MentionsOptions, SearchKind, SearchOptions,
+};
 pub use search_files::{search_files, FileSearchResult, SearchFilesInput};
 pub use search_messages::{search_messages, ContentType, SearchMessagesInput};
 pub use search_query::build_search_query;
