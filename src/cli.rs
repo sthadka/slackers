@@ -765,6 +765,12 @@ pub enum ChannelCommand {
 
     /// List members of a channel
     Members(ChannelMembersOptions),
+
+    /// Create a new channel
+    New(ChannelNewOptions),
+
+    /// Invite users to a channel
+    Invite(ChannelInviteOptions),
 }
 
 #[derive(Args, Debug)]
@@ -775,6 +781,35 @@ pub struct ChannelMembersOptions {
     /// Resolve user IDs to display names via users.info
     #[arg(long)]
     pub resolve_users: bool,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ChannelNewOptions {
+    /// Channel name (lowercase letters, numbers, hyphens, underscores)
+    #[arg(long)]
+    pub name: String,
+
+    /// Create as a private channel
+    #[arg(long)]
+    pub private: bool,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ChannelInviteOptions {
+    /// Channel id (C...) or #name/name
+    pub target: String,
+
+    /// Comma-separated list of user IDs to invite
+    #[arg(long, value_delimiter = ',')]
+    pub users: Vec<String>,
 
     /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]

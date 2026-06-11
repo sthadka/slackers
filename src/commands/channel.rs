@@ -1,5 +1,5 @@
 use crate::auth::resolve_auth;
-use crate::cli::{ChannelCommand, ChannelMarkOptions, ChannelMembersOptions};
+use crate::cli::{ChannelCommand, ChannelInviteOptions, ChannelMarkOptions, ChannelMembersOptions, ChannelNewOptions};
 use crate::error::Result;
 use crate::output::to_json_output;
 use crate::slack::{
@@ -32,6 +32,8 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
         }
         ChannelCommand::Mark(opts) => handle_channel_mark(opts).await,
         ChannelCommand::Members(opts) => handle_channel_members(opts).await,
+        ChannelCommand::New(opts) => handle_channel_new(opts).await,
+        ChannelCommand::Invite(opts) => handle_channel_invite(opts).await,
     }
 }
 
@@ -188,6 +190,53 @@ async fn handle_channel_members(opts: ChannelMembersOptions) -> Result<()> {
         "channel_id": channel_id,
         "member_count": member_count,
         "members": members,
+    });
+    println!("{}", to_json_output(&output));
+
+    Ok(())
+}
+
+async fn handle_channel_new(opts: ChannelNewOptions) -> Result<()> {
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    let channel = client.create_channel(&opts.name, opts.private).await?;
+
+    let channel_id = channel
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let name = channel
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&opts.name)
+        .to_string();
+
+    let output = json!({
+        "ok": true,
+        "channel_id": channel_id,
+        "name": name,
+    });
+    println!("{}", to_json_output(&output));
+
+    Ok(())
+}
+
+async fn handle_channel_invite(opts: ChannelInviteOptions) -> Result<()> {
+    let auth_result = resolve_auth(opts.workspace.as_deref())?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    // Resolve channel name → ID
+    let channel_id = crate::slack::channels::resolve_channel_id(&client, &opts.target).await?;
+
+    let invited_count = opts.users.len();
+    client.invite_to_channel(&channel_id, &opts.users).await?;
+
+    let output = json!({
+        "ok": true,
+        "channel_id": channel_id,
+        "invited_count": invited_count,
     });
     println!("{}", to_json_output(&output));
 
