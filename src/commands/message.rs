@@ -176,6 +176,28 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
 
     messages = filter_messages(messages, &filter);
 
+    // Apply --with-reaction filter (client-side)
+    if let Some(ref reaction_name) = options.with_reaction {
+        let name = reaction_name.trim_matches(':');
+        messages.retain(|msg| {
+            msg.get("reactions")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name)))
+                .unwrap_or(false)
+        });
+    }
+
+    // Apply --without-reaction filter (client-side)
+    if let Some(ref reaction_name) = options.without_reaction {
+        let name = reaction_name.trim_matches(':');
+        messages.retain(|msg| {
+            !msg.get("reactions")
+                .and_then(|v| v.as_array())
+                .map(|arr| arr.iter().any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name)))
+                .unwrap_or(false)
+        });
+    }
+
     // Apply limit if specified
     if let Some(limit) = options.limit {
         messages.truncate(limit);
@@ -609,6 +631,66 @@ fn apply_config_filters(
             true
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    fn make_msg_with_reactions(ts: &str, reactions: &[&str]) -> serde_json::Value {
+        let reaction_objs: Vec<serde_json::Value> = reactions
+            .iter()
+            .map(|name| json!({"name": name, "count": 1}))
+            .collect();
+        json!({"ts": ts, "user": "U1", "text": "hi", "reactions": reaction_objs})
+    }
+
+    fn make_msg_no_reactions(ts: &str) -> serde_json::Value {
+        json!({"ts": ts, "user": "U1", "text": "hi"})
+    }
+
+    #[test]
+    fn test_with_reaction_filter() {
+        let msgs = vec![
+            make_msg_with_reactions("1.0", &["thumbsup", "rocket"]),
+            make_msg_with_reactions("2.0", &["rocket"]),
+            make_msg_no_reactions("3.0"),
+        ];
+        let name = "thumbsup";
+        let filtered: Vec<_> = msgs
+            .into_iter()
+            .filter(|msg| {
+                msg.get("reactions")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name)))
+                    .unwrap_or(false)
+            })
+            .collect();
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0]["ts"], "1.0");
+    }
+
+    #[test]
+    fn test_without_reaction_filter() {
+        let msgs = vec![
+            make_msg_with_reactions("1.0", &["thumbsup"]),
+            make_msg_with_reactions("2.0", &["rocket"]),
+            make_msg_no_reactions("3.0"),
+        ];
+        let name = "thumbsup";
+        let filtered: Vec<_> = msgs
+            .into_iter()
+            .filter(|msg| {
+                !msg.get("reactions")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter().any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name)))
+                    .unwrap_or(false)
+            })
+            .collect();
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["ts"], "2.0");
+        assert_eq!(filtered[1]["ts"], "3.0");
+    }
 }
 
 /// Convert a YYYY-MM-DD string to a Unix timestamp string for the Slack API.

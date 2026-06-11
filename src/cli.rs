@@ -266,6 +266,14 @@ pub struct MessageListOptions {
     /// Only show messages with reactions
     #[arg(long)]
     pub has_reaction: bool,
+
+    /// Only show messages that have this reaction (emoji name, e.g. thumbsup)
+    #[arg(long)]
+    pub with_reaction: Option<String>,
+
+    /// Only show messages that do NOT have this reaction (emoji name, e.g. thumbsup)
+    #[arg(long)]
+    pub without_reaction: Option<String>,
 }
 
 #[derive(Subcommand, Debug)]
