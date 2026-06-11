@@ -1,5 +1,6 @@
 pub mod attachments;
 pub mod blocks;
+pub mod format;
 pub mod html_to_md;
 pub mod mrkdwn;
 
