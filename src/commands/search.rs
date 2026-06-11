@@ -2,7 +2,10 @@ use crate::auth::resolve_auth;
 use crate::cli::SearchCommand;
 use crate::error::Result;
 use crate::output::to_json_output;
-use crate::slack::{search_slack, ContentType, SearchKind, SearchOptions, SlackClient};
+use crate::slack::{
+    search_slack, AdvancedQueryFilters, ContentType, SearchKind, SearchOptions, SlackClient,
+    SortOrder,
+};
 use serde_json::json;
 
 pub async fn handle_search(subcommand: SearchCommand) -> Result<()> {
@@ -37,6 +40,19 @@ async fn handle_search_impl(
         _ => ContentType::Any,
     };
 
+    // Parse sort order
+    let sort = match options.sort.as_deref() {
+        Some("relevance") | Some("score") => SortOrder::Relevance,
+        _ => SortOrder::Timestamp,
+    };
+
+    // Parse advanced filters
+    let advanced_filters = AdvancedQueryFilters {
+        has_link: options.has_link,
+        has_emoji: options.has_emoji,
+        from_me: options.from_me,
+    };
+
     // Build search options
     let max_content_chars = if options.max_content_chars < 0 {
         usize::MAX
@@ -56,6 +72,8 @@ async fn handle_search_impl(
         limit: options.limit as usize,
         max_content_chars,
         download: true, // Always download files for local access
+        sort,
+        advanced_filters,
     };
 
     // Execute search

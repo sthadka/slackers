@@ -1,8 +1,9 @@
 use crate::auth::WorkspaceAuth;
 use crate::error::Result;
 use crate::slack::{
-    build_search_query, search_files, search_messages, CompactSlackMessage, ContentType,
-    FileSearchResult, SearchFilesInput, SearchMessagesInput, SlackClient,
+    build_search_query, build_search_query_with_filters, search_files, search_messages,
+    AdvancedQueryFilters, CompactSlackMessage, ContentType, FileSearchResult, SearchFilesInput,
+    SearchMessagesInput, SlackClient, SortOrder,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +25,10 @@ pub struct SearchOptions<'a> {
     pub limit: usize,
     pub max_content_chars: usize,
     pub download: bool,
+    /// Sort order for results (default: Timestamp / newest first)
+    pub sort: SortOrder,
+    /// Advanced query filters (has:link, has:emoji, from:me)
+    pub advanced_filters: AdvancedQueryFilters,
 }
 
 impl<'a> Default for SearchOptions<'a> {
@@ -40,6 +45,8 @@ impl<'a> Default for SearchOptions<'a> {
             limit: 20,
             max_content_chars: 4000,
             download: true,
+            sort: SortOrder::Timestamp,
+            advanced_filters: AdvancedQueryFilters::default(),
         }
     }
 }
@@ -73,6 +80,8 @@ pub struct MentionsOptions<'a> {
     pub max_content_chars: usize,
     /// Whether to download attached files locally
     pub download: bool,
+    /// Sort order for results (default: Timestamp / newest first)
+    pub sort: SortOrder,
 }
 
 impl<'a> Default for MentionsOptions<'a> {
@@ -86,6 +95,7 @@ impl<'a> Default for MentionsOptions<'a> {
             limit: 20,
             max_content_chars: 4000,
             download: false,
+            sort: SortOrder::Timestamp,
         }
     }
 }
@@ -140,7 +150,7 @@ pub async fn search_mentions(
         max_content_chars: options.max_content_chars,
         content_type: ContentType::Any,
         download: options.download,
-        sort: crate::slack::SortOrder::default(),
+        sort: options.sort,
     };
 
     search_messages(client, messages_input).await
@@ -150,6 +160,8 @@ pub async fn search_mentions(
 ///
 /// Routes to appropriate search modules based on kind (messages, files, or all).
 /// Applies shared defaults: limit=20 (max 200), max_content_chars=4000.
+/// Sort order and advanced filters (has:link, has:emoji, from:me) are
+/// threaded through to the underlying API calls.
 pub async fn search_slack(
     client: &SlackClient,
     auth: &WorkspaceAuth,
@@ -160,17 +172,31 @@ pub async fn search_slack(
     let max_content_chars = options.max_content_chars;
     let content_type = options.content_type.clone();
     let download = options.download;
+    let sort = options.sort.clone();
 
-    // Build Slack search query
-    let slack_query = build_search_query(
-        client,
-        options.query,
-        options.channels,
-        options.user,
-        options.after,
-        options.before,
-    )
-    .await?;
+    // Build Slack search query, including advanced filter tokens when present
+    let slack_query = if options.advanced_filters.is_empty() {
+        build_search_query(
+            client,
+            options.query,
+            options.channels,
+            options.user,
+            options.after,
+            options.before,
+        )
+        .await?
+    } else {
+        build_search_query_with_filters(
+            client,
+            options.query,
+            options.channels,
+            options.user,
+            options.after,
+            options.before,
+            Some(&options.advanced_filters),
+        )
+        .await?
+    };
 
     let mut result = SearchResult::default();
 
@@ -184,7 +210,7 @@ pub async fn search_slack(
             max_content_chars,
             content_type: content_type.clone(),
             download,
-            sort: crate::slack::SortOrder::default(),
+            sort: sort.clone(),
         };
 
         let messages = search_messages(client, messages_input).await?;
@@ -198,7 +224,7 @@ pub async fn search_slack(
             query: &slack_query,
             limit,
             content_type: content_type.clone(),
-            sort: crate::slack::SortOrder::default(),
+            sort: sort.clone(),
         };
 
         let files = search_files(client, files_input).await?;
@@ -219,6 +245,8 @@ mod tests {
         assert_eq!(opts.max_content_chars, 4000);
         assert!(opts.download);
         assert_eq!(opts.content_type, ContentType::Any);
+        assert_eq!(opts.sort, SortOrder::Timestamp);
+        assert!(opts.advanced_filters.is_empty());
     }
 
     #[test]
@@ -257,5 +285,32 @@ mod tests {
         assert_eq!(opts.max_content_chars, 4000);
         assert!(!opts.download);
         assert!(opts.username.is_none());
+        assert_eq!(opts.sort, SortOrder::Timestamp);
+    }
+
+    #[test]
+    fn test_sort_order_in_search_options() {
+        let opts = SearchOptions {
+            sort: SortOrder::Relevance,
+            ..Default::default()
+        };
+        assert_eq!(opts.sort, SortOrder::Relevance);
+    }
+
+    #[test]
+    fn test_advanced_filters_in_search_options() {
+        let opts = SearchOptions {
+            advanced_filters: AdvancedQueryFilters {
+                has_link: true,
+                has_emoji: false,
+                from_me: true,
+            },
+            ..Default::default()
+        };
+        assert!(!opts.advanced_filters.is_empty());
+        let tokens = opts.advanced_filters.to_tokens();
+        assert!(tokens.contains(&"has:link".to_string()));
+        assert!(tokens.contains(&"from:me".to_string()));
+        assert!(!tokens.contains(&"has:emoji".to_string()));
     }
 }

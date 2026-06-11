@@ -1,8 +1,8 @@
 use crate::auth::WorkspaceAuth;
 use crate::error::Result;
 use crate::slack::{
-    download_file, fetch_message, search_messages_raw, to_compact_message, CompactMessageOptions,
-    CompactSlackMessage, SlackClient,
+    download_file, fetch_message, search_messages_raw_sorted, to_compact_message,
+    CompactMessageOptions, CompactSlackMessage, SlackClient, SortOrder,
 };
 use crate::target::{parse_slack_message_url, SlackMessageRef};
 use serde_json::Value;
@@ -26,6 +26,8 @@ pub struct SearchMessagesInput<'a> {
     pub max_content_chars: usize,
     pub content_type: ContentType,
     pub download: bool,
+    /// Sort order for results (default: Timestamp / newest first)
+    pub sort: SortOrder,
 }
 
 /// Search for messages using the search.messages API
@@ -36,7 +38,7 @@ pub async fn search_messages(
     input: SearchMessagesInput<'_>,
 ) -> Result<Vec<CompactSlackMessage>> {
     // Get raw matches from search API
-    let raw_matches = search_messages_raw(client, input.query, input.limit).await?;
+    let raw_matches = search_messages_raw_sorted(client, input.query, input.limit, &input.sort).await?;
 
     if raw_matches.is_empty() {
         return Ok(Vec::new());

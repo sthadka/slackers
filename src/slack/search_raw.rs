@@ -2,13 +2,48 @@ use crate::error::Result;
 use crate::slack::SlackClient;
 use serde_json::Value;
 
+/// Sort order for Slack search results
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum SortOrder {
+    /// Sort by relevance score (Slack default for search)
+    Relevance,
+    /// Sort by message/file timestamp, newest first
+    #[default]
+    Timestamp,
+}
+
+impl SortOrder {
+    /// Return the Slack API `sort` parameter value for this order.
+    pub fn as_slack_param(&self) -> &'static str {
+        match self {
+            SortOrder::Relevance => "score",
+            SortOrder::Timestamp => "timestamp",
+        }
+    }
+}
+
 /// Search for messages using Slack's search.messages API
 ///
 /// Returns raw message matches from the search API with pagination support.
+/// Pass `sort = SortOrder::Relevance` to get results ranked by Slack's
+/// relevance algorithm instead of the default newest-first ordering.
 pub async fn search_messages_raw(
     client: &SlackClient,
     query: &str,
     limit: usize,
+) -> Result<Vec<Value>> {
+    search_messages_raw_sorted(client, query, limit, &SortOrder::Timestamp).await
+}
+
+/// Search for messages with explicit sort order.
+///
+/// This is the full-featured variant; `search_messages_raw` delegates here
+/// with `SortOrder::Timestamp` to preserve backwards compatibility.
+pub async fn search_messages_raw_sorted(
+    client: &SlackClient,
+    query: &str,
+    limit: usize,
+    sort: &SortOrder,
 ) -> Result<Vec<Value>> {
     let page_size = limit.min(100).max(1);
     let mut results = Vec::new();
@@ -22,7 +57,7 @@ pub async fn search_messages_raw(
             ("count".to_string(), page_size.to_string()),
             ("page".to_string(), page.to_string()),
             ("highlight".to_string(), "false".to_string()),
-            ("sort".to_string(), "timestamp".to_string()),
+            ("sort".to_string(), sort.as_slack_param().to_string()),
             ("sort_dir".to_string(), "desc".to_string()),
         ];
 
@@ -79,6 +114,19 @@ pub async fn search_files_raw(
     query: &str,
     limit: usize,
 ) -> Result<Vec<Value>> {
+    search_files_raw_sorted(client, query, limit, &SortOrder::Timestamp).await
+}
+
+/// Search for files with explicit sort order.
+///
+/// This is the full-featured variant; `search_files_raw` delegates here
+/// with `SortOrder::Timestamp` to preserve backwards compatibility.
+pub async fn search_files_raw_sorted(
+    client: &SlackClient,
+    query: &str,
+    limit: usize,
+    sort: &SortOrder,
+) -> Result<Vec<Value>> {
     let page_size = limit.min(100).max(1);
     let mut results = Vec::new();
     let mut page = 1;
@@ -91,7 +139,7 @@ pub async fn search_files_raw(
             ("count".to_string(), page_size.to_string()),
             ("page".to_string(), page.to_string()),
             ("highlight".to_string(), "false".to_string()),
-            ("sort".to_string(), "timestamp".to_string()),
+            ("sort".to_string(), sort.as_slack_param().to_string()),
             ("sort_dir".to_string(), "desc".to_string()),
         ];
 
@@ -140,6 +188,8 @@ pub async fn search_files_raw(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn test_page_size_calculation() {
         // Page size should be clamped between 1 and 100
@@ -154,5 +204,16 @@ mod tests {
         let limit = 50;
         let page_size = limit.min(100).max(1);
         assert_eq!(page_size, 50);
+    }
+
+    #[test]
+    fn test_sort_order_slack_param() {
+        assert_eq!(SortOrder::Relevance.as_slack_param(), "score");
+        assert_eq!(SortOrder::Timestamp.as_slack_param(), "timestamp");
+    }
+
+    #[test]
+    fn test_sort_order_default() {
+        assert_eq!(SortOrder::default(), SortOrder::Timestamp);
     }
 }

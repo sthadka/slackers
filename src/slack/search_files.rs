@@ -1,6 +1,6 @@
 use crate::auth::WorkspaceAuth;
 use crate::error::Result;
-use crate::slack::{download_file, search_files_raw, ContentType, SlackClient};
+use crate::slack::{download_file, search_files_raw_sorted, ContentType, SlackClient, SortOrder};
 use std::path::PathBuf;
 
 pub struct SearchFilesInput<'a> {
@@ -8,6 +8,8 @@ pub struct SearchFilesInput<'a> {
     pub query: &'a str,
     pub limit: usize,
     pub content_type: ContentType,
+    /// Sort order for results (default: Timestamp / newest first)
+    pub sort: SortOrder,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -26,7 +28,7 @@ pub async fn search_files(
     input: SearchFilesInput<'_>,
 ) -> Result<Vec<FileSearchResult>> {
     // Get raw matches from search API
-    let raw_matches = search_files_raw(client, input.query, input.limit).await?;
+    let raw_matches = search_files_raw_sorted(client, input.query, input.limit, &input.sort).await?;
 
     if raw_matches.is_empty() {
         return Ok(Vec::new());

@@ -27,6 +27,9 @@ pub use search::{
 };
 pub use search_files::{search_files, FileSearchResult, SearchFilesInput};
 pub use search_messages::{search_messages, ContentType, SearchMessagesInput};
-pub use search_query::build_search_query;
-pub use search_raw::{search_files_raw, search_messages_raw};
+pub use search_query::{build_search_query, build_search_query_with_filters, AdvancedQueryFilters};
+pub use search_raw::{
+    search_files_raw, search_files_raw_sorted, search_messages_raw, search_messages_raw_sorted,
+    SortOrder,
+};
 pub use users::{get_user, list_users};

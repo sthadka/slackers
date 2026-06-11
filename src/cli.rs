@@ -446,6 +446,22 @@ pub struct SearchOptions {
     /// Max message content characters (default 4000, -1 for unlimited)
     #[arg(long, default_value = "4000")]
     pub max_content_chars: i32,
+
+    /// Sort order: timestamp (default) or relevance
+    #[arg(long)]
+    pub sort: Option<String>,
+
+    /// Only results containing a URL (has:link)
+    #[arg(long, default_value = "false")]
+    pub has_link: bool,
+
+    /// Only results containing an emoji reaction (has:emoji)
+    #[arg(long, default_value = "false")]
+    pub has_emoji: bool,
+
+    /// Only results sent by the authenticated user (from:me)
+    #[arg(long, default_value = "false")]
+    pub from_me: bool,
 }
 
 // ============================================================================
