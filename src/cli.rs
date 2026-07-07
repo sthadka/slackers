@@ -9,6 +9,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub read_only: bool,
 
+    /// Produce indented JSON instead of compact single-line JSON
+    #[arg(long, global = true)]
+    pub pretty: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

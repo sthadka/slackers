@@ -17,6 +17,7 @@ use cli::Cli;
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    output::set_pretty(cli.pretty);
 
     if let Err(e) = commands::dispatch(cli.command, cli.read_only).await {
         eprintln!("Error: {}", e);

@@ -22,7 +22,7 @@ use serde_json::Value;
 /// Output format variants supported by CLI commands.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum OutputFormat {
-    /// Pretty-printed JSON with empty fields pruned (default).
+    /// JSON with empty fields pruned (default; compact unless `--pretty`).
     #[default]
     Json,
     /// ASCII table via comfy-table.
@@ -51,7 +51,7 @@ impl OutputFormat {
         match self {
             Self::Json => {
                 let pruned = crate::output::prune_empty(json_val);
-                serde_json::to_string_pretty(&pruned).unwrap_or_else(|_| "{}".to_string())
+                crate::output::serialize_json(&pruned)
             }
             Self::Table => {
                 let rows = value_to_rows(&json_val);
@@ -84,8 +84,8 @@ impl OutputFormat {
                         Value::Object(obj)
                     })
                     .collect();
-                serde_json::to_string_pretty(&Value::Array(objects))
-                    .unwrap_or_else(|_| "[]".to_string())
+                let arr = crate::output::prune_empty(Value::Array(objects));
+                crate::output::serialize_json(&arr)
             }
             Self::Table => format_table(headers, rows),
             Self::Markdown => format_markdown(headers, rows),
@@ -225,8 +225,12 @@ mod tests {
     fn test_format_json() {
         let val = json!({"name": "Alice", "score": 42});
         let out = OutputFormat::Json.render(&val);
-        assert!(out.contains("\"name\": \"Alice\""));
-        assert!(out.contains("\"score\": 42"));
+        assert!(out.contains("\"name\""));
+        assert!(out.contains("\"Alice\""));
+        assert!(out.contains("\"score\""));
+        let parsed: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["name"], "Alice");
+        assert_eq!(parsed["score"], 42);
     }
 
     #[test]

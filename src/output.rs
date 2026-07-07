@@ -1,5 +1,25 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use serde::Serialize;
 use serde_json::Value;
+
+static PRETTY: AtomicBool = AtomicBool::new(false);
+
+pub fn set_pretty(val: bool) {
+    PRETTY.store(val, Ordering::Relaxed);
+}
+
+pub fn is_pretty() -> bool {
+    PRETTY.load(Ordering::Relaxed)
+}
+
+pub fn serialize_json(value: &Value) -> String {
+    if is_pretty() {
+        serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string())
+    } else {
+        serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string())
+    }
+}
 
 /// Recursively prune empty values from a JSON value
 ///
@@ -62,14 +82,15 @@ fn is_empty_value(value: &Value) -> bool {
     }
 }
 
-/// Convert a value to pretty-printed JSON with empty fields pruned
+/// Convert a value to JSON with empty fields pruned.
 ///
 /// This is the primary output format for all CLI commands.
-/// Produces 2-space indented JSON with empty values removed.
+/// Produces compact single-line JSON by default, or 2-space indented
+/// JSON when `--pretty` is passed.
 pub fn to_json_output<T: Serialize>(value: &T) -> String {
     let json_value = serde_json::to_value(value).unwrap_or(Value::Null);
     let pruned = prune_empty(json_value);
-    serde_json::to_string_pretty(&pruned).unwrap_or_else(|_| "{}".to_string())
+    serialize_json(&pruned)
 }
 
 #[cfg(test)]
@@ -177,8 +198,8 @@ mod tests {
         };
 
         let output = to_json_output(&data);
-        assert!(output.contains("\"name\": \"test\""));
-        assert!(output.contains("\"count\": 42"));
+        assert!(output.contains("\"name\":\"test\""));
+        assert!(output.contains("\"count\":42"));
         assert!(!output.contains("value")); // null field should be pruned
     }
 }
