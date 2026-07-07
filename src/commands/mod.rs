@@ -10,6 +10,7 @@ pub mod mention;
 pub mod later;
 pub mod scheduled;
 mod search;
+mod slash;
 mod unreads;
 mod user;
 mod workflow;
@@ -96,6 +97,9 @@ pub async fn dispatch(command: Command) -> Result<()> {
         }
         Command::Workflow { subcommand } => {
             workflow::handle_workflow(subcommand).await
+        }
+        Command::Slash { subcommand } => {
+            slash::handle_slash(subcommand).await
         }
     }
 }

@@ -96,6 +96,35 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: WorkflowCommand,
     },
+    /// Execute slash commands in channels (requires browser token)
+    Slash {
+        #[command(subcommand)]
+        subcommand: SlashCommand,
+    },
+}
+
+// ============================================================================
+// Slash Command Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum SlashCommand {
+    /// Execute a slash command in a channel
+    Run(SlashRunOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct SlashRunOptions {
+    /// Channel ID (C...) or #name/name where the command will run
+    #[arg(long)]
+    pub channel: String,
+
+    /// Slash command with arguments (e.g. "/remind me to check in 1 hour")
+    pub command: Vec<String>,
+
+    /// Workspace URL (required if you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
 }
 
 // ============================================================================

@@ -11,6 +11,7 @@ pub mod search_messages;
 pub mod search_query;
 pub mod rich_text;
 pub mod search_raw;
+pub mod slash;
 pub mod unreads;
 pub mod users;
 pub mod workflows;
