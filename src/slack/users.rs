@@ -110,14 +110,7 @@ pub async fn get_user(client: &SlackClient, identifier: &str) -> Result<CompactS
     let users = list_users(client, None, true).await?;
 
     for user_value in users {
-        // Check name, display_name, or real_name
-        let matches = user_value.name.as_deref() == Some(handle)
-            || user_value.display_name.as_deref() == Some(handle)
-            || user_value
-                .real_name
-                .as_deref()
-                .map(|rn| rn.eq_ignore_ascii_case(handle))
-                .unwrap_or(false);
+        let matches = user_matches_handle(&user_value, handle);
 
         if matches {
             return Ok(user_value);
@@ -128,6 +121,23 @@ pub async fn get_user(client: &SlackClient, identifier: &str) -> Result<CompactS
         "User not found: {}",
         identifier
     )))
+}
+
+fn user_matches_handle(user: &CompactSlackUser, handle: &str) -> bool {
+    user.name
+        .as_deref()
+        .map(|n| n.eq_ignore_ascii_case(handle))
+        .unwrap_or(false)
+        || user
+            .display_name
+            .as_deref()
+            .map(|d| d.eq_ignore_ascii_case(handle))
+            .unwrap_or(false)
+        || user
+            .real_name
+            .as_deref()
+            .map(|rn| rn.eq_ignore_ascii_case(handle))
+            .unwrap_or(false)
 }
 
 /// Convert a full Slack user object to compact representation
@@ -233,6 +243,78 @@ mod tests {
         assert_eq!(compact.real_name, None);
         assert_eq!(compact.display_name, None);
         assert_eq!(compact.email, None);
+    }
+
+    #[test]
+    fn test_user_matches_handle_case_insensitive_name() {
+        let user = CompactSlackUser {
+            id: "U123".to_string(),
+            name: Some("John".to_string()),
+            real_name: None,
+            display_name: None,
+            email: None,
+            title: None,
+            tz: None,
+            is_bot: None,
+            deleted: None,
+        };
+        assert!(user_matches_handle(&user, "john"));
+        assert!(user_matches_handle(&user, "JOHN"));
+        assert!(user_matches_handle(&user, "John"));
+        assert!(!user_matches_handle(&user, "jane"));
+    }
+
+    #[test]
+    fn test_user_matches_handle_case_insensitive_display_name() {
+        let user = CompactSlackUser {
+            id: "U456".to_string(),
+            name: None,
+            real_name: None,
+            display_name: Some("JohnD".to_string()),
+            email: None,
+            title: None,
+            tz: None,
+            is_bot: None,
+            deleted: None,
+        };
+        assert!(user_matches_handle(&user, "johnd"));
+        assert!(user_matches_handle(&user, "JOHND"));
+        assert!(user_matches_handle(&user, "JohnD"));
+    }
+
+    #[test]
+    fn test_user_matches_handle_case_insensitive_real_name() {
+        let user = CompactSlackUser {
+            id: "U789".to_string(),
+            name: None,
+            real_name: Some("John Doe".to_string()),
+            display_name: None,
+            email: None,
+            title: None,
+            tz: None,
+            is_bot: None,
+            deleted: None,
+        };
+        assert!(user_matches_handle(&user, "john doe"));
+        assert!(user_matches_handle(&user, "JOHN DOE"));
+        assert!(user_matches_handle(&user, "John Doe"));
+    }
+
+    #[test]
+    fn test_user_matches_handle_no_match() {
+        let user = CompactSlackUser {
+            id: "U000".to_string(),
+            name: Some("alice".to_string()),
+            real_name: Some("Alice Smith".to_string()),
+            display_name: Some("alices".to_string()),
+            email: None,
+            title: None,
+            tz: None,
+            is_bot: None,
+            deleted: None,
+        };
+        assert!(!user_matches_handle(&user, "bob"));
+        assert!(!user_matches_handle(&user, "alic"));
     }
 
     #[test]
