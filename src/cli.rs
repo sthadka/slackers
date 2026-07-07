@@ -816,6 +816,19 @@ pub enum ChannelCommand {
 
     /// Invite users to a channel
     Invite(ChannelInviteOptions),
+
+    /// Rename a channel
+    Rename {
+        /// Channel id (C...) or #name/name
+        channel: String,
+
+        /// New name for the channel
+        name: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }
 
 #[derive(Args, Debug)]

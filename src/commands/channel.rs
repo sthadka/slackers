@@ -37,6 +37,9 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
         ChannelCommand::Members(opts) => handle_channel_members(opts).await,
         ChannelCommand::New(opts) => handle_channel_new(opts).await,
         ChannelCommand::Invite(opts) => handle_channel_invite(opts).await,
+        ChannelCommand::Rename { channel, name, workspace } => {
+            handle_channel_rename(&channel, &name, workspace.as_deref()).await
+        }
     }
 }
 
@@ -273,6 +276,30 @@ async fn handle_channel_invite(opts: ChannelInviteOptions) -> Result<()> {
         "ok": true,
         "channel_id": channel_id,
         "invited_count": invited_count,
+    });
+    println!("{}", to_json_output(&output));
+
+    Ok(())
+}
+
+async fn handle_channel_rename(channel: &str, new_name: &str, workspace: Option<&str>) -> Result<()> {
+    let auth_result = resolve_auth(workspace)?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    let channel_id = crate::slack::channels::resolve_channel_id(&client, channel).await?;
+
+    let channel_info = client.rename_channel(&channel_id, new_name).await?;
+
+    let name = channel_info
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(new_name)
+        .to_string();
+
+    let output = json!({
+        "ok": true,
+        "channel_id": channel_id,
+        "name": name,
     });
     println!("{}", to_json_output(&output));
 

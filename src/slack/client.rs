@@ -703,6 +703,19 @@ impl SlackClient {
         Ok(channel)
     }
 
+    pub async fn rename_channel(&self, channel_id: &str, name: &str) -> Result<Value> {
+        let params = vec![
+            ("channel".to_string(), channel_id.to_string()),
+            ("name".to_string(), name.to_string()),
+        ];
+        let body = self.api_call("conversations.rename", params).await?;
+        let channel = body
+            .get("channel")
+            .ok_or_else(|| SlackersError::Other("No 'channel' field in conversations.rename response".to_string()))?
+            .clone();
+        Ok(channel)
+    }
+
     /// Invite users to an existing Slack channel via `conversations.invite`.
     ///
     /// `channel_id` – channel ID (C...)
