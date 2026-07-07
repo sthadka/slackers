@@ -218,8 +218,17 @@ mod tests {
         assert_eq!(other.error_code(), None);
     }
 
+    fn make_http_error() -> SlackersError {
+        let client = reqwest::Client::builder()
+            .build()
+            .unwrap();
+        let err = client.get("not-a-url://").build().unwrap_err();
+        SlackersError::Http(err)
+    }
+
     #[test]
     fn test_is_retryable() {
+        assert!(make_http_error().is_retryable());
         assert!(!SlackersError::Auth(AuthError::NoCredentials).is_retryable());
         assert!(!SlackersError::from_slack_api("test", None).is_retryable());
         assert!(!SlackersError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "nope")).is_retryable());
@@ -229,6 +238,7 @@ mod tests {
     #[test]
     fn test_exit_code() {
         assert_eq!(SlackersError::Auth(AuthError::NoCredentials).exit_code(), 3);
+        assert_eq!(make_http_error().exit_code(), 4);
         assert_eq!(SlackersError::from_slack_api("test", None).exit_code(), 5);
         assert_eq!(
             SlackersError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "nope")).exit_code(),
@@ -246,5 +256,10 @@ mod tests {
             )).exit_code(),
             1
         );
+    }
+
+    #[test]
+    fn test_http_error_type_is_network() {
+        assert_eq!(make_http_error().error_type(), "network");
     }
 }
