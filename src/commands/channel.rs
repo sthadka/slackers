@@ -17,8 +17,9 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
             exclude_archived,
             limit,
             resolve_users,
+            all,
             format,
-        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users, &format).await,
+        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users, all, &format).await,
         ChannelCommand::Get {
             channel,
             workspace,
@@ -45,18 +46,30 @@ async fn handle_channel_list(
     exclude_archived: bool,
     limit: u32,
     resolve_users: bool,
+    all: bool,
     format: &str,
 ) -> Result<()> {
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
-    let mut channels = list_conversations(
+    let fetch_limit = if all { Some(limit as usize) } else { None };
+    let fetched = list_conversations(
         &client,
         types,
         exclude_archived,
-        Some(limit as usize),
+        fetch_limit,
     )
     .await?;
+
+    let mut channels: Vec<_> = if all {
+        fetched
+    } else {
+        fetched
+            .into_iter()
+            .filter(|ch| ch.is_member == Some(true))
+            .take(limit as usize)
+            .collect()
+    };
 
     if resolve_users {
         for ch in &mut channels {

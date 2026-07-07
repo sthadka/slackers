@@ -762,6 +762,10 @@ pub enum ChannelCommand {
         #[arg(long)]
         resolve_users: bool,
 
+        /// Show all channels, not just ones you've joined
+        #[arg(long)]
+        all: bool,
+
         /// Output format: json (default), table, markdown, plain
         #[arg(long, default_value = "json")]
         format: String,
