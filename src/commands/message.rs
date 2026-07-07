@@ -1,7 +1,7 @@
 use crate::app_config::{load_app_config, load_history_cursors, save_history_cursors};
 use crate::auth::resolve_auth;
 use crate::cli::{MessageCommand, MessageDeleteOptions, MessageGetOptions, MessageHistoryOptions, MessageListOptions, MessagePinOptions, MessageUnpinOptions, MessageUpdateOptions, ReactCommand};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::render::format::OutputFormat;
@@ -10,6 +10,7 @@ use crate::slack::{
     get_thread_summary, get_user, resolve_channel_id, text_to_rich_text_blocks,
     to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
+use crate::slack::user_cache::{collect_referenced_user_ids, resolve_users_by_id, to_referenced_users};
 use crate::target::{parse_msg_target, MsgTarget};
 use chrono::NaiveDate;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -155,11 +156,21 @@ async fn handle_message_get(target: &str, options: MessageGetOptions) -> Result<
         }
     }
 
-    // Resolve user IDs to display names if requested
     if options.resolve_users {
         let msgs_slice = std::slice::from_ref(&output);
-        let user_map = build_user_map(&client, msgs_slice).await;
-        enrich_message_with_user_name(&mut output, &user_map);
+        let user_ids = collect_referenced_user_ids(msgs_slice);
+        let users_by_id = resolve_users_by_id(
+            &client,
+            auth_result.workspace_url.as_deref(),
+            &user_ids,
+            options.refresh_users,
+        ).await;
+        enrich_message_with_user_name(&mut output, &build_name_map(&users_by_id));
+        if let Some(ref_users) = to_referenced_users(&user_ids, &users_by_id) {
+            if let Some(obj) = output.as_object_mut() {
+                obj.insert("referenced_users".to_string(), json!(ref_users));
+            }
+        }
     }
 
     println!("{}", to_json_output(&output));
@@ -274,12 +285,20 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         }
     }
 
-    // Resolve user IDs to display names if requested
+    let mut referenced_users_map = None;
     if options.resolve_users {
-        let user_map = build_user_map(&client, &compact_messages).await;
+        let user_ids = collect_referenced_user_ids(&compact_messages);
+        let users_by_id = resolve_users_by_id(
+            &client,
+            auth_result.workspace_url.as_deref(),
+            &user_ids,
+            options.refresh_users,
+        ).await;
+        let name_map = build_name_map(&users_by_id);
         for msg in &mut compact_messages {
-            enrich_message_with_user_name(msg, &user_map);
+            enrich_message_with_user_name(msg, &name_map);
         }
+        referenced_users_map = to_referenced_users(&user_ids, &users_by_id);
     }
 
     // Determine output format
@@ -291,6 +310,12 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         "thread_ts": thread_ts,
         "messages": compact_messages
     });
+
+    if let Some(ref_users) = referenced_users_map {
+        if let Some(obj) = output.as_object_mut() {
+            obj.insert("referenced_users".to_string(), json!(ref_users));
+        }
+    }
 
     if !all_downloaded_files.is_empty() {
         if let Some(obj) = output.as_object_mut() {
@@ -1068,30 +1093,18 @@ async fn handle_message_update(opts: MessageUpdateOptions) -> Result<()> {
     Ok(())
 }
 
-/// Collect all unique user IDs from a slice of compact-message JSON values,
-/// resolve them to display names via `users.info`, and return a map from
-/// user-ID to display name.  Look-up failures are silently skipped so the
-/// rest of the output is unaffected.
-async fn build_user_map(client: &SlackClient, messages: &[serde_json::Value]) -> HashMap<String, String> {
-    // Collect unique user IDs
-    let ids: HashSet<String> = messages
+fn build_name_map(users_by_id: &HashMap<String, crate::slack::users::CompactSlackUser>) -> HashMap<String, String> {
+    users_by_id
         .iter()
-        .filter_map(|m| m.get("user").and_then(|v| v.as_str()).map(|s| s.to_string()))
-        .collect();
-
-    let mut map = HashMap::new();
-    for uid in ids {
-        if let Ok(user) = get_user(client, &uid).await {
-            let name = user
-                .display_name
-                .filter(|s| !s.is_empty())
-                .or(user.real_name)
-                .or(user.name)
+        .map(|(uid, user)| {
+            let name = user.display_name.as_ref().filter(|s| !s.is_empty())
+                .or(user.real_name.as_ref())
+                .or(user.name.as_ref())
+                .cloned()
                 .unwrap_or_else(|| uid.clone());
-            map.insert(uid, name);
-        }
-    }
-    map
+            (uid.clone(), name)
+        })
+        .collect()
 }
 
 /// Apply a user-ID → display-name map to a mutable JSON value.

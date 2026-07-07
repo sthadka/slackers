@@ -4,11 +4,13 @@ use crate::error::Result;
 use crate::output::to_json_output;
 use crate::render::format::OutputFormat;
 use crate::slack::{
-    get_user, search_slack, AdvancedQueryFilters, ContentType, SearchKind, SearchOptions,
+    search_slack, AdvancedQueryFilters, ContentType, SearchKind, SearchOptions,
     SlackClient, SortOrder,
 };
+use crate::slack::user_cache::{collect_referenced_user_ids, resolve_users_by_id, to_referenced_users};
+use crate::slack::users::CompactSlackUser;
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub async fn handle_search(subcommand: SearchCommand) -> Result<()> {
     match subcommand {
@@ -24,28 +26,18 @@ pub async fn handle_search(subcommand: SearchCommand) -> Result<()> {
     }
 }
 
-/// Collect unique user IDs from a slice of JSON message values, resolve them to
-/// display names via `users.info`, and return a map from user-ID → display name.
-/// Look-up failures are silently skipped.
-async fn build_search_user_map(client: &SlackClient, messages: &[Value]) -> HashMap<String, String> {
-    let ids: HashSet<String> = messages
+fn build_name_map(users_by_id: &HashMap<String, CompactSlackUser>) -> HashMap<String, String> {
+    users_by_id
         .iter()
-        .filter_map(|m| m.get("user").and_then(|v| v.as_str()).map(|s| s.to_string()))
-        .collect();
-
-    let mut map = HashMap::new();
-    for uid in ids {
-        if let Ok(user) = get_user(client, &uid).await {
-            let name = user
-                .display_name
-                .filter(|s| !s.is_empty())
-                .or(user.real_name)
-                .or(user.name)
+        .map(|(uid, user)| {
+            let name = user.display_name.as_ref().filter(|s| !s.is_empty())
+                .or(user.real_name.as_ref())
+                .or(user.name.as_ref())
+                .cloned()
                 .unwrap_or_else(|| uid.clone());
-            map.insert(uid, name);
-        }
-    }
-    map
+            (uid.clone(), name)
+        })
+        .collect()
 }
 
 async fn handle_search_impl(
@@ -105,41 +97,51 @@ async fn handle_search_impl(
     // Execute search
     let result = search_slack(&client, &auth_result.auth, search_opts).await?;
 
-    // Optionally resolve user IDs to display names in message results
-    let messages_value: Value = if options.resolve_users {
-        let mut msgs: Vec<Value> = result
-            .messages
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .map(|m| serde_json::to_value(m).unwrap_or(Value::Null))
-            .collect();
+    let mut msgs: Vec<Value> = result
+        .messages
+        .as_deref()
+        .unwrap_or(&[])
+        .iter()
+        .map(|m| serde_json::to_value(m).unwrap_or(Value::Null))
+        .collect();
 
-        if !msgs.is_empty() {
-            let user_map = build_search_user_map(&client, &msgs).await;
-            for msg in &mut msgs {
-                if let Some(obj) = msg.as_object_mut() {
-                    if let Some(uid) = obj.get("user").and_then(|v| v.as_str()).map(|s| s.to_string()) {
-                        if let Some(name) = user_map.get(&uid) {
-                            obj.insert("user_name".to_string(), json!(name));
-                        }
+    let mut referenced_users_value: Option<Value> = None;
+    if options.resolve_users && !msgs.is_empty() {
+        let user_ids = collect_referenced_user_ids(&msgs);
+        let users_by_id = resolve_users_by_id(
+            &client,
+            auth_result.workspace_url.as_deref(),
+            &user_ids,
+            options.refresh_users,
+        ).await;
+        let name_map = build_name_map(&users_by_id);
+        for msg in &mut msgs {
+            if let Some(obj) = msg.as_object_mut() {
+                if let Some(uid) = obj.get("user").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                    if let Some(name) = name_map.get(&uid) {
+                        obj.insert("user_name".to_string(), json!(name));
                     }
                 }
             }
         }
-        json!(msgs)
-    } else {
-        json!(result.messages)
-    };
+        referenced_users_value = to_referenced_users(&user_ids, &users_by_id).map(|m| json!(m));
+    }
+    let messages_value = json!(msgs);
 
     // Determine output format
     let fmt = OutputFormat::from_str(&options.format).unwrap_or_default();
 
     // Build output
-    let output = json!({
+    let mut output = json!({
         "messages": messages_value,
         "files": result.files,
     });
+
+    if let Some(ref_users) = referenced_users_value {
+        if let Some(obj) = output.as_object_mut() {
+            obj.insert("referenced_users".to_string(), ref_users);
+        }
+    }
 
     match fmt {
         OutputFormat::Json => println!("{}", to_json_output(&output)),

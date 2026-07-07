@@ -13,6 +13,7 @@ pub mod rich_text;
 pub mod search_raw;
 pub mod slash;
 pub mod unreads;
+pub mod user_cache;
 pub mod users;
 pub mod workflows;
 

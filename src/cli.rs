@@ -517,6 +517,10 @@ pub struct MessageGetOptions {
     /// Resolve user IDs to display names via users.info
     #[arg(long)]
     pub resolve_users: bool,
+
+    /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
+    #[arg(long)]
+    pub refresh_users: bool,
 }
 
 #[derive(Args, Debug)]
@@ -584,6 +588,10 @@ pub struct MessageListOptions {
     /// Resolve user IDs to display names via users.info
     #[arg(long)]
     pub resolve_users: bool,
+
+    /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
+    #[arg(long)]
+    pub refresh_users: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -714,6 +722,10 @@ pub struct SearchOptions {
     /// Resolve user IDs to display names via users.info
     #[arg(long)]
     pub resolve_users: bool,
+
+    /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
+    #[arg(long)]
+    pub refresh_users: bool,
 }
 
 // ============================================================================
