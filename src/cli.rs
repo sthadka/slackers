@@ -5,6 +5,10 @@ use clap::{Args, Parser, Subcommand};
 #[command(about = "Rust clone of agent-slack - Slack automation CLI for AI agents")]
 #[command(version)]
 pub struct Cli {
+    /// Block all write operations (send, update, delete, pin, react, etc.)
+    #[arg(long, global = true)]
+    pub read_only: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

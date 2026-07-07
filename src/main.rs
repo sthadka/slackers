@@ -17,7 +17,7 @@ use cli::Cli;
 async fn main() {
     let cli = Cli::parse();
 
-    if let Err(e) = commands::dispatch(cli.command).await {
+    if let Err(e) = commands::dispatch(cli.command, cli.read_only).await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }

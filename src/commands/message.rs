@@ -7,7 +7,7 @@ use crate::output::to_json_output;
 use crate::render::format::OutputFormat;
 use crate::slack::{
     download_file, fetch_message, fetch_thread, filter_messages, format_outbound_slack_text,
-    get_thread_summary, get_user, resolve_channel_id, text_to_rich_text_blocks,
+    get_thread_summary, resolve_channel_id, text_to_rich_text_blocks,
     to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
 use crate::slack::user_cache::{collect_referenced_user_ids, resolve_users_by_id, to_referenced_users};
