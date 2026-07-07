@@ -105,6 +105,8 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: SlashCommand,
     },
+    /// Start an MCP (Model Context Protocol) server over stdio
+    Serve,
 }
 
 // ============================================================================

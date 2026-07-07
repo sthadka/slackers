@@ -184,5 +184,8 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
                 slash::handle_slash(subcommand).await
             }
         },
+        Command::Serve => {
+            crate::mcp::run_server(read_only).await
+        }
     }
 }
