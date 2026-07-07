@@ -22,19 +22,6 @@ impl SortOrder {
     }
 }
 
-/// Search for messages using Slack's search.messages API
-///
-/// Returns raw message matches from the search API with pagination support.
-/// Pass `sort = SortOrder::Relevance` to get results ranked by Slack's
-/// relevance algorithm instead of the default newest-first ordering.
-pub async fn search_messages_raw(
-    client: &SlackClient,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<Value>> {
-    search_messages_raw_sorted(client, query, limit, &SortOrder::Timestamp).await
-}
-
 /// Search for messages with explicit sort order.
 ///
 /// This is the full-featured variant; `search_messages_raw` delegates here
@@ -104,17 +91,6 @@ pub async fn search_messages_raw_sorted(
     // Truncate to requested limit
     results.truncate(limit);
     Ok(results)
-}
-
-/// Search for files using Slack's search.files API
-///
-/// Returns raw file matches from the search API with pagination support.
-pub async fn search_files_raw(
-    client: &SlackClient,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<Value>> {
-    search_files_raw_sorted(client, query, limit, &SortOrder::Timestamp).await
 }
 
 /// Search for files with explicit sort order.

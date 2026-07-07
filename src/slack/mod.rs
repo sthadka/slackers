@@ -28,16 +28,11 @@ pub use messages::{
     fetch_message, fetch_thread, filter_messages, get_thread_summary, to_compact_message,
     CompactMessageOptions, CompactSlackMessage, MessageFilter,
 };
-pub use search::{
-    mentions_query_token, search_mentions, search_slack, MentionsOptions, SearchKind, SearchOptions,
-};
+pub use search::{search_mentions, search_slack, MentionsOptions, SearchKind, SearchOptions};
 pub use search_files::{search_files, FileSearchResult, SearchFilesInput};
 pub use search_messages::{search_messages, ContentType, SearchMessagesInput};
 pub use search_query::{build_search_query, build_search_query_with_filters, AdvancedQueryFilters};
-pub use search_raw::{
-    search_files_raw, search_files_raw_sorted, search_messages_raw, search_messages_raw_sorted,
-    SortOrder,
-};
+pub use search_raw::{search_files_raw_sorted, search_messages_raw_sorted, SortOrder};
 pub use format_outbound::format_outbound_slack_text;
 pub use rich_text::text_to_rich_text_blocks;
 pub use users::{get_user, list_users};

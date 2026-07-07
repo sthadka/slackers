@@ -1,5 +1,3 @@
-use std::process::Command;
-
 /// Placeholder value written to credentials file when storing tokens in macOS Keychain
 pub const KEYCHAIN_PLACEHOLDER: &str = "__KEYCHAIN__";
 

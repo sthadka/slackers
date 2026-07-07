@@ -1,4 +1,3 @@
-use crate::slack::CompactSlackMessage;
 use serde_json::Value;
 
 /// Render a list of messages (and their optional thread replies) as an HTML page.
@@ -299,18 +298,6 @@ fn avatar_color_for(user: &str) -> &'static str {
     ];
     let hash: usize = user.bytes().fold(0usize, |acc, b| acc.wrapping_add(b as usize));
     COLORS[hash % COLORS.len()]
-}
-
-/// Build an HTML export from `CompactSlackMessage` structs directly.
-///
-/// This is a convenience wrapper over `render_html_export` for callers that
-/// already have typed `CompactSlackMessage` values.
-pub fn render_html_from_compact(messages: &[CompactSlackMessage]) -> String {
-    let values: Vec<Value> = messages
-        .iter()
-        .filter_map(|m| serde_json::to_value(m).ok())
-        .collect();
-    render_html_export(&values)
 }
 
 #[cfg(test)]

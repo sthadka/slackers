@@ -1,6 +1,10 @@
-use crate::error::{Result, SlackersError};
 use serde::{Deserialize, Serialize};
+
+#[cfg(target_os = "macos")]
+use crate::error::{Result, SlackersError};
+#[cfg(target_os = "macos")]
 use serde_json::Value;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,12 +21,12 @@ pub struct ChromeExtracted {
     pub teams: Vec<ChromeTeam>,
 }
 
-/// Escape string for use in osascript -e '...'
+#[cfg(target_os = "macos")]
 fn escape_osascript(script: &str) -> String {
     script.replace('\'', r#"'"'"'"#)
 }
 
-/// Execute osascript with the given AppleScript
+#[cfg(target_os = "macos")]
 fn osascript(script: &str) -> Result<String> {
     let escaped = escape_osascript(script);
     let output = Command::new("osascript")
@@ -39,7 +43,7 @@ fn osascript(script: &str) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
-/// AppleScript to extract cookie 'd' from Chrome
+#[cfg(target_os = "macos")]
 fn cookie_script() -> &'static str {
     r#"
     tell application "Google Chrome"
@@ -55,7 +59,7 @@ fn cookie_script() -> &'static str {
     "#
 }
 
-/// AppleScript to extract teams from Chrome localStorage
+#[cfg(target_os = "macos")]
 fn teams_script() -> String {
     let team_json_paths = vec![
         "JSON.stringify(JSON.parse(localStorage.localConfig_v2).teams)",
@@ -86,7 +90,7 @@ fn teams_script() -> String {
     )
 }
 
-/// Parse a team object from JSON
+#[cfg(target_os = "macos")]
 fn parse_team(value: &Value) -> Option<ChromeTeam> {
     let obj = value.as_object()?;
     let url = obj.get("url")?.as_str()?.to_string();
@@ -102,47 +106,38 @@ fn parse_team(value: &Value) -> Option<ChromeTeam> {
     Some(ChromeTeam { url, name, token })
 }
 
-/// Extract authentication data from Chrome
-///
-/// Uses osascript to execute JavaScript in Chrome tabs with slack.com open.
-/// Returns None if Chrome is not available or no Slack tabs are found.
+#[cfg(not(target_os = "macos"))]
+pub fn extract_from_chrome() -> std::result::Result<Option<ChromeExtracted>, crate::error::SlackersError> {
+    Ok(None)
+}
+
+#[cfg(target_os = "macos")]
 pub fn extract_from_chrome() -> Result<Option<ChromeExtracted>> {
-    // Check if running on macOS
-    #[cfg(not(target_os = "macos"))]
-    {
+    let cookie = osascript(cookie_script()).ok().unwrap_or_default();
+
+    if cookie.is_empty() || !cookie.starts_with("xoxd-") {
         return Ok(None);
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        // Try to extract cookie
-        let cookie = osascript(cookie_script()).ok().unwrap_or_default();
+    let teams_raw = osascript(&teams_script()).ok().unwrap_or_else(|| "{}".to_string());
 
-        if cookie.is_empty() || !cookie.starts_with("xoxd-") {
-            return Ok(None);
-        }
+    let teams_obj: Value = serde_json::from_str(&teams_raw).unwrap_or_else(|_| serde_json::json!({}));
 
-        // Try to extract teams
-        let teams_raw = osascript(&teams_script()).ok().unwrap_or_else(|| "{}".to_string());
+    let teams: Vec<ChromeTeam> = if let Some(teams_map) = teams_obj.as_object() {
+        teams_map
+            .values()
+            .filter_map(parse_team)
+            .collect()
+    } else {
+        vec![]
+    };
 
-        let teams_obj: Value = serde_json::from_str(&teams_raw).unwrap_or_else(|_| serde_json::json!({}));
-
-        let teams: Vec<ChromeTeam> = if let Some(teams_map) = teams_obj.as_object() {
-            teams_map
-                .values()
-                .filter_map(parse_team)
-                .collect()
-        } else {
-            vec![]
-        };
-
-        if teams.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(ChromeExtracted {
-            cookie_d: cookie,
-            teams,
-        }))
+    if teams.is_empty() {
+        return Ok(None);
     }
+
+    Ok(Some(ChromeExtracted {
+        cookie_d: cookie,
+        teams,
+    }))
 }

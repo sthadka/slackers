@@ -45,10 +45,7 @@ impl OutputFormat {
         }
     }
 
-    /// Render a serialisable value according to this format.
-    ///
-    /// For `Json` this mirrors [`crate::output::to_json_output`].
-    /// For the other formats the value is flattened into key/value rows.
+    #[allow(dead_code)]
     pub fn render<T: Serialize + ?Sized>(&self, value: &T) -> String {
         let json_val = serde_json::to_value(value).unwrap_or(Value::Null);
         match self {
@@ -99,15 +96,14 @@ impl OutputFormat {
 
 // ── Trait ────────────────────────────────────────────────────────────────────
 
-/// A type that can format itself for CLI output.
+#[allow(dead_code)]
 pub trait Formattable: Serialize {
-    /// Render `self` using the given [`OutputFormat`].
     fn format(&self, fmt: &OutputFormat) -> String where Self: Sized {
         fmt.render(self)
     }
 }
 
-/// Blanket implementation: any `Serialize` type is `Formattable`.
+#[allow(dead_code)]
 impl<T: Serialize> Formattable for T {}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -180,6 +176,7 @@ pub fn format_plain(rows: &[Vec<String>]) -> String {
 ///
 /// Objects are iterated over their fields; arrays become `[0]`, `[1]`, …;
 /// scalars produce a single row with key `"value"`.
+#[allow(dead_code)]
 fn value_to_rows(val: &Value) -> Vec<Vec<String>> {
     match val {
         Value::Object(map) => map
@@ -196,6 +193,7 @@ fn value_to_rows(val: &Value) -> Vec<Vec<String>> {
 }
 
 /// Convert a JSON value to a compact display string.
+#[allow(dead_code)]
 fn scalar_to_string(val: &Value) -> String {
     match val {
         Value::String(s) => s.clone(),

@@ -44,6 +44,7 @@ pub struct ChatUpdateResponse {
 /// Icon information returned as part of `team.info`
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 pub struct WorkspaceIcon {
     pub image_34: Option<String>,
     pub image_44: Option<String>,
