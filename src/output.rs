@@ -5,6 +5,7 @@ use serde_json::Value;
 
 static PRETTY: AtomicBool = AtomicBool::new(false);
 static QUIET: AtomicBool = AtomicBool::new(false);
+static NO_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 pub fn set_pretty(val: bool) {
     PRETTY.store(val, Ordering::Relaxed);
@@ -20,6 +21,14 @@ pub fn set_quiet(val: bool) {
 
 pub fn is_quiet() -> bool {
     QUIET.load(Ordering::Relaxed)
+}
+
+pub fn set_no_progress(val: bool) {
+    NO_PROGRESS.store(val, Ordering::Relaxed);
+}
+
+pub fn is_no_progress() -> bool {
+    NO_PROGRESS.load(Ordering::Relaxed)
 }
 
 pub fn serialize_json(value: &Value) -> String {

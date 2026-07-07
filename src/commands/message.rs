@@ -718,6 +718,9 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
 
 fn new_spinner(msg: &str) -> ProgressBar {
     let pb = ProgressBar::new_spinner();
+    if crate::output::is_no_progress() {
+        pb.set_draw_target(indicatif::ProgressDrawTarget::hidden());
+    }
     pb.set_style(
         ProgressStyle::default_spinner()
             .template("{spinner:.cyan} {msg}")
@@ -730,6 +733,9 @@ fn new_spinner(msg: &str) -> ProgressBar {
 
 fn new_progress_bar(total: u64, label: &str) -> ProgressBar {
     let pb = ProgressBar::new(total);
+    if crate::output::is_no_progress() {
+        pb.set_draw_target(indicatif::ProgressDrawTarget::hidden());
+    }
     pb.set_style(
         ProgressStyle::default_bar()
             .template(&format!(
