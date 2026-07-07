@@ -320,7 +320,6 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "properties": {
                     "workspace": prop("Workspace URL"),
                     "limit": int_prop("Max users (default 200)"),
-                    "cursor": prop("Pagination cursor"),
                     "include_bots": bool_prop("Include bot users"),
                     "format": prop("Output format: json, table, markdown, plain")
                 }
@@ -968,7 +967,6 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             cli.push("list".into());
             if let Some(v) = str_val(args, "workspace") { cli.push("--workspace".into()); cli.push(v); }
             if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
-            if let Some(v) = str_val(args, "cursor") { cli.push("--cursor".into()); cli.push(v); }
             if bool_val(args, "include_bots") { cli.push("--include-bots".into()); }
             if let Some(v) = str_val(args, "format") { cli.push("--format".into()); cli.push(v); }
         }
