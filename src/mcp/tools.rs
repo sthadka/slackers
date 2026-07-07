@@ -233,7 +233,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
-                    "max_content_chars": int_prop("Max message chars (default 4000)"),
+                    "max_body_chars": int_prop("Max message body chars (default 4000)"),
                     "sort": enum_prop("Sort order", &["timestamp", "relevance"]),
                     "content_type": enum_prop("Filter by content type", &["any", "text", "image", "snippet", "file"]),
                     "has_link": bool_prop("Only with links"),
@@ -260,7 +260,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
-                    "max_content_chars": int_prop("Max content chars (default 4000)"),
+                    "max_body_chars": int_prop("Max body chars (default 4000)"),
                     "sort": enum_prop("Sort order", &["timestamp", "relevance"]),
                     "content_type": enum_prop("Filter by content type", &["any", "text", "image", "snippet", "file"]),
                     "has_link": bool_prop("Only with links"),
@@ -287,7 +287,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
-                    "max_content_chars": int_prop("Max content chars (default 4000)"),
+                    "max_body_chars": int_prop("Max body chars (default 4000)"),
                     "sort": enum_prop("Sort order", &["timestamp", "relevance"]),
                     "content_type": enum_prop("Filter by content type", &["any", "text", "image", "snippet", "file"]),
                     "has_link": bool_prop("Only with links"),
@@ -309,7 +309,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "properties": {
                     "canvas": prop("Slack canvas URL or canvas ID (F...)"),
                     "workspace": prop("Workspace URL"),
-                    "max_chars": int_prop("Max markdown chars (default 20000, -1 unlimited)")
+                    "max_body_chars": int_prop("Max markdown chars (default 20000, -1 unlimited)")
                 },
                 "required": ["canvas"]
             }),
@@ -691,7 +691,8 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
-                    "workspace": prop("Workspace URL")
+                    "workspace": prop("Workspace URL"),
+                    "max_body_chars": int_prop("Max message body chars (default 4000, -1 unlimited)")
                 }
             }),
             is_write: false,
@@ -964,7 +965,7 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             cli.push("get".into());
             cli.push(str_req(args, "canvas"));
             if let Some(v) = str_val(args, "workspace") { cli.push("--workspace".into()); cli.push(v); }
-            if let Some(v) = int_val(args, "max_chars") { cli.push("--max-chars".into()); cli.push(v.to_string()); }
+            if let Some(v) = int_val(args, "max_body_chars") { cli.push("--max-body-chars".into()); cli.push(v.to_string()); }
         }
         "user_list" => {
             cli.push("user".into());
@@ -1182,6 +1183,7 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             if let Some(v) = str_val(args, "before") { cli.push("--before".into()); cli.push(v); }
             if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
             if let Some(v) = str_val(args, "workspace") { cli.push("--workspace".into()); cli.push(v); }
+            if let Some(v) = int_val(args, "max_body_chars") { cli.push("--max-body-chars".into()); cli.push(v.to_string()); }
         }
         "export_channel" => {
             cli.push("export".into());
@@ -1250,7 +1252,7 @@ fn append_search_opts(cli: &mut Vec<String>, args: &Value) {
     if let Some(v) = str_val(args, "before") { cli.push("--before".into()); cli.push(v); }
     if let Some(v) = str_val(args, "content_type") { cli.push("--content-type".into()); cli.push(v); }
     if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
-    if let Some(v) = int_val(args, "max_content_chars") { cli.push("--max-content-chars".into()); cli.push(v.to_string()); }
+    if let Some(v) = int_val(args, "max_body_chars") { cli.push("--max-body-chars".into()); cli.push(v.to_string()); }
     if let Some(v) = str_val(args, "sort") { cli.push("--sort".into()); cli.push(v); }
     if bool_val(args, "has_link") { cli.push("--has-link".into()); }
     if bool_val(args, "has_emoji") { cli.push("--has-emoji".into()); }

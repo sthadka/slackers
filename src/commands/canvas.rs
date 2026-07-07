@@ -10,28 +10,25 @@ pub async fn handle_canvas(subcommand: CanvasCommand) -> Result<()> {
         CanvasCommand::Get {
             canvas,
             workspace,
-            max_chars,
-        } => handle_canvas_get(&canvas, workspace.as_deref(), max_chars).await,
+            max_body_chars,
+        } => handle_canvas_get(&canvas, workspace.as_deref(), max_body_chars).await,
     }
 }
 
 async fn handle_canvas_get(
     target: &str,
     workspace: Option<&str>,
-    max_chars: i32,
+    max_body_chars: i32,
 ) -> Result<()> {
-    // Parse canvas identifier
     let file_id = parse_canvas_identifier(target)?;
 
-    // Resolve auth
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url);
 
-    // Determine max chars (default 20000, -1 for unlimited)
-    let max = if max_chars < 0 {
+    let max = if max_body_chars < 0 {
         None
     } else {
-        Some(max_chars as usize)
+        Some(max_body_chars as usize)
     };
 
     // Fetch and convert canvas

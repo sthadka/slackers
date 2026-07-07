@@ -13,9 +13,16 @@ pub async fn handle_mention_list(
     after: Option<String>,
     before: Option<String>,
     limit: usize,
+    max_body_chars: i32,
 ) -> Result<()> {
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
+
+    let max_content_chars = if max_body_chars < 0 {
+        usize::MAX
+    } else {
+        max_body_chars as usize
+    };
 
     let options = MentionsOptions {
         workspace_url: auth_result.workspace_url.as_deref(),
@@ -24,7 +31,7 @@ pub async fn handle_mention_list(
         after: after.as_deref(),
         before: before.as_deref(),
         limit,
-        max_content_chars: 4000,
+        max_content_chars,
         download: false,
         sort: SortOrder::Timestamp,
     };

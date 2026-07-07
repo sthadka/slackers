@@ -72,10 +72,10 @@ async fn handle_search_impl(
     };
 
     // Build search options
-    let max_content_chars = if options.max_content_chars < 0 {
+    let max_content_chars = if options.max_body_chars < 0 {
         usize::MAX
     } else {
-        options.max_content_chars as usize
+        options.max_body_chars as usize
     };
 
     let search_opts = SearchOptions {

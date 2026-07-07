@@ -709,9 +709,9 @@ pub struct SearchOptions {
     #[arg(long, default_value = "20")]
     pub limit: u32,
 
-    /// Max message content characters (default 4000, -1 for unlimited)
+    /// Max message body characters (default 4000, -1 for unlimited)
     #[arg(long, default_value = "4000")]
-    pub max_content_chars: i32,
+    pub max_body_chars: i32,
 
     /// Sort order: timestamp (default) or relevance
     #[arg(long)]
@@ -755,7 +755,7 @@ pub enum CanvasCommand {
 
         /// Max markdown characters to include (default 20000, -1 for unlimited)
         #[arg(long, default_value = "20000")]
-        max_chars: i32,
+        max_body_chars: i32,
     },
 }
 
@@ -1179,6 +1179,10 @@ pub struct MentionListOptions {
     /// Workspace URL (needed when you have multiple workspaces)
     #[arg(long)]
     pub workspace: Option<String>,
+
+    /// Max message body characters (default 4000, -1 for unlimited)
+    #[arg(long, default_value = "4000")]
+    pub max_body_chars: i32,
 }
 
 // ============================================================================

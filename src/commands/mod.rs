@@ -149,6 +149,7 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
                     opts.after,
                     opts.before,
                     opts.limit,
+                    opts.max_body_chars,
                 )
                 .await
             }
