@@ -9,9 +9,11 @@ pub mod search;
 pub mod search_files;
 pub mod search_messages;
 pub mod search_query;
+pub mod rich_text;
 pub mod search_raw;
 pub mod unreads;
 pub mod users;
+pub mod workflows;
 
 pub use canvas::{fetch_canvas, parse_canvas_identifier};
 pub use channels::{
@@ -35,4 +37,5 @@ pub use search_raw::{
     SortOrder,
 };
 pub use format_outbound::format_outbound_slack_text;
+pub use rich_text::text_to_rich_text_blocks;
 pub use users::{get_user, list_users};

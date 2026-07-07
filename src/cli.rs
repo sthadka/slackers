@@ -91,6 +91,11 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: UnreadsCommand,
     },
+    /// Discover and interact with Slack workflows
+    Workflow {
+        #[command(subcommand)]
+        subcommand: WorkflowCommand,
+    },
 }
 
 // ============================================================================
@@ -1189,4 +1194,55 @@ pub struct UnreadsShowOptions {
     /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]
     pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Workflow Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum WorkflowCommand {
+    /// List workflows bookmarked or featured in a channel
+    List {
+        /// Channel id or name (#channel, channel, C...)
+        channel: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+
+    /// Get workflow metadata from a trigger ID (no side effects)
+    Preview {
+        /// Trigger ID (Ft...)
+        trigger_id: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+
+    /// Get workflow definition including form fields and steps (accepts Ft... or Wf...)
+    Get {
+        /// Trigger ID (Ft...) or Workflow ID (Wf...)
+        id: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+
+    /// Trip a workflow trigger
+    Run {
+        /// Trigger ID (Ft...)
+        trigger_id: String,
+
+        /// Channel where the workflow is bookmarked
+        #[arg(long)]
+        channel: String,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
 }

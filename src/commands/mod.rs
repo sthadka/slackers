@@ -12,6 +12,7 @@ pub mod scheduled;
 mod search;
 mod unreads;
 mod user;
+mod workflow;
 pub mod workspace;
 
 use crate::cli::{BatchCommand, Command, DmCommand, EmojiCommand, ExportCommand, LaterCommand, MentionCommand, WorkspaceCommand};
@@ -92,6 +93,9 @@ pub async fn dispatch(command: Command) -> Result<()> {
         },
         Command::Unreads { subcommand } => {
             unreads::handle_unreads(subcommand).await
+        }
+        Command::Workflow { subcommand } => {
+            workflow::handle_workflow(subcommand).await
         }
     }
 }
