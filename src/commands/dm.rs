@@ -1,7 +1,7 @@
 use crate::auth::resolve_auth;
 use crate::error::Result;
 use crate::output::to_json_output;
-use crate::slack::SlackClient;
+use crate::slack::{format_outbound_slack_text, SlackClient};
 use serde_json::json;
 
 /// Open a direct message conversation with one or more users.
@@ -41,9 +41,10 @@ pub async fn handle_dm_send(
     let channel_id = conv.id;
 
     // Step 2: post a message to the DM channel
+    let formatted_message = format_outbound_slack_text(&message);
     let params = vec![
         ("channel".to_string(), channel_id.clone()),
-        ("text".to_string(), message),
+        ("text".to_string(), formatted_message),
     ];
     let response = client.api_call("chat.postMessage", params).await?;
 

@@ -3,6 +3,7 @@ pub mod channels;
 pub mod client;
 pub mod emoji;
 pub mod files;
+pub mod format_outbound;
 pub mod messages;
 pub mod search;
 pub mod search_files;
@@ -32,4 +33,5 @@ pub use search_raw::{
     search_files_raw, search_files_raw_sorted, search_messages_raw, search_messages_raw_sorted,
     SortOrder,
 };
+pub use format_outbound::format_outbound_slack_text;
 pub use users::{get_user, list_users};

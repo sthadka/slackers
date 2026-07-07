@@ -6,8 +6,9 @@ use crate::error::{Result, SlackersError};
 use crate::output::to_json_output;
 use crate::render::format::OutputFormat;
 use crate::slack::{
-    download_file, fetch_message, fetch_thread, filter_messages, get_thread_summary, get_user,
-    resolve_channel_id, to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
+    download_file, fetch_message, fetch_thread, filter_messages, format_outbound_slack_text,
+    get_thread_summary, get_user, resolve_channel_id, to_compact_message, CompactMessageOptions,
+    MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
 use chrono::NaiveDate;
@@ -346,9 +347,10 @@ async fn handle_message_send(
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
     // Build params
+    let formatted_text = format_outbound_slack_text(text);
     let mut params = vec![
         ("channel".to_string(), channel_id),
-        ("text".to_string(), text.to_string()),
+        ("text".to_string(), formatted_text),
     ];
 
     // Add thread_ts if provided or auto-detected
@@ -918,7 +920,8 @@ async fn handle_message_delete(opts: MessageDeleteOptions) -> Result<()> {
 async fn handle_message_update(opts: MessageUpdateOptions) -> Result<()> {
     let auth_result = resolve_auth(opts.workspace.as_deref())?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
-    let resp = client.update_message(&opts.channel, &opts.ts, &opts.text).await?;
+    let formatted_text = format_outbound_slack_text(&opts.text);
+    let resp = client.update_message(&opts.channel, &opts.ts, &formatted_text).await?;
     println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "text": resp.text })));
     Ok(())
 }

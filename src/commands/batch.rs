@@ -2,7 +2,7 @@ use crate::auth::resolve_auth;
 use crate::cli::{BatchReactOptions, BatchSendOptions};
 use crate::error::Result;
 use crate::output::to_json_output;
-use crate::slack::{emoji::normalize_reaction_name, SlackClient};
+use crate::slack::{emoji::normalize_reaction_name, format_outbound_slack_text, SlackClient};
 use crate::target::{parse_msg_target, MsgTarget};
 use serde_json::{json, Value};
 
@@ -11,11 +11,12 @@ pub async fn handle_batch_send(options: BatchSendOptions) -> Result<()> {
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
     let mut results: Vec<Value> = Vec::new();
+    let formatted_message = format_outbound_slack_text(&options.message);
 
     for channel in &options.channels {
         let params = vec![
             ("channel".to_string(), channel.clone()),
-            ("text".to_string(), options.message.clone()),
+            ("text".to_string(), formatted_message.clone()),
         ];
 
         match client.api_call("chat.postMessage", params).await {
