@@ -18,6 +18,7 @@ use cli::Cli;
 async fn main() {
     let cli = Cli::parse();
     output::set_pretty(cli.pretty);
+    output::set_quiet(cli.quiet);
 
     if let Err(e) = commands::dispatch(cli.command, cli.read_only).await {
         let mut err_obj = serde_json::json!({

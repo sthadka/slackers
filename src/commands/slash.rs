@@ -28,6 +28,10 @@ async fn handle_slash_run(
 
     let result = execute_slash_command(&client, &channel_id, &command, &text).await?;
 
-    println!("{}", to_json_output(&result));
+    if crate::output::is_quiet() {
+        println!("{}", to_json_output(&serde_json::json!({ "ok": true })));
+    } else {
+        println!("{}", to_json_output(&result));
+    }
     Ok(())
 }

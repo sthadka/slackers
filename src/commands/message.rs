@@ -452,6 +452,11 @@ async fn handle_message_send(
     let ts = response.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let channel_id = response.get("channel").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
+    if crate::output::is_quiet() {
+        println!("{}", to_json_output(&json!({ "ok": true, "ts": ts, "channel": channel_id })));
+        return Ok(());
+    }
+
     // Fetch permalink via chat.getPermalink
     let permalink = if !ts.is_empty() && !channel_id.is_empty() {
         let permalink_params = vec![
@@ -1089,7 +1094,11 @@ async fn handle_message_update(opts: MessageUpdateOptions) -> Result<()> {
     let rich_blocks = text_to_rich_text_blocks(&opts.text);
     let blocks_slice = rich_blocks.as_deref();
     let resp = client.update_message(&opts.channel, &opts.ts, &formatted_text, blocks_slice).await?;
-    println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "text": resp.text })));
+    if crate::output::is_quiet() {
+        println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "channel": opts.channel })));
+    } else {
+        println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "text": resp.text })));
+    }
     Ok(())
 }
 

@@ -4,6 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 static PRETTY: AtomicBool = AtomicBool::new(false);
+static QUIET: AtomicBool = AtomicBool::new(false);
 
 pub fn set_pretty(val: bool) {
     PRETTY.store(val, Ordering::Relaxed);
@@ -11,6 +12,14 @@ pub fn set_pretty(val: bool) {
 
 pub fn is_pretty() -> bool {
     PRETTY.load(Ordering::Relaxed)
+}
+
+pub fn set_quiet(val: bool) {
+    QUIET.store(val, Ordering::Relaxed);
+}
+
+pub fn is_quiet() -> bool {
+    QUIET.load(Ordering::Relaxed)
 }
 
 pub fn serialize_json(value: &Value) -> String {

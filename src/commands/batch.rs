@@ -42,7 +42,7 @@ pub async fn handle_batch_send(options: BatchSendOptions) -> Result<()> {
         }
     }
 
-    let output = json!({ "results": results });
+    let output = json!({ "ok": true, "results": results });
     println!("{}", to_json_output(&output));
     Ok(())
 }
@@ -130,7 +130,7 @@ pub async fn handle_batch_react(options: BatchReactOptions) -> Result<()> {
         }
     }
 
-    let output = json!({ "results": results });
+    let output = json!({ "ok": true, "results": results });
     println!("{}", to_json_output(&output));
     Ok(())
 }

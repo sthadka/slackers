@@ -13,6 +13,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub pretty: bool,
 
+    /// Minimal JSON output for write operations (e.g. {"ok":true})
+    #[arg(long, global = true)]
+    pub quiet: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

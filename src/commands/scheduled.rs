@@ -22,17 +22,20 @@ async fn handle_scheduled_send(opts: MessageScheduleOptions) -> Result<()> {
 
     let body = client.schedule_message(&opts.channel, &opts.message, post_at).await?;
 
-    let scheduled_message_id = body
-        .get("scheduled_message_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    let output = json!({
-        "ok": true,
-        "scheduled_message_id": scheduled_message_id,
-        "post_at": post_at,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        let scheduled_message_id = body
+            .get("scheduled_message_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        json!({
+            "ok": true,
+            "scheduled_message_id": scheduled_message_id,
+            "post_at": post_at,
+        })
+    };
     println!("{}", to_json_output(&output));
 
     Ok(())

@@ -30,12 +30,16 @@ async fn handle_file_upload(opts: FileUploadOptions) -> Result<()> {
         )
         .await?;
 
-    let output = json!({
-        "ok": true,
-        "file_id": resp.id,
-        "permalink": resp.permalink,
-        "url_private": resp.url_private,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        json!({
+            "ok": true,
+            "file_id": resp.id,
+            "permalink": resp.permalink,
+            "url_private": resp.url_private,
+        })
+    };
 
     println!("{}", to_json_output(&output));
     Ok(())

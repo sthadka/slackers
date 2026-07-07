@@ -146,11 +146,14 @@ async fn handle_channel_join(channel: &str, workspace: Option<&str>) -> Result<(
     // Join conversation (API handles both IDs and names)
     let channel_info = join_conversation(&client, channel).await?;
 
-    // Output as JSON object
-    let output = json!({
-        "ok": true,
-        "channel": channel_info,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        json!({
+            "ok": true,
+            "channel": channel_info,
+        })
+    };
     println!("{}", to_json_output(&output));
 
     Ok(())
@@ -167,11 +170,14 @@ async fn handle_channel_leave(channel: &str, workspace: Option<&str>) -> Result<
     // Leave conversation
     leave_conversation(&client, &channel_id).await?;
 
-    // Output success
-    let output = json!({
-        "ok": true,
-        "channel": channel_id,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        json!({
+            "ok": true,
+            "channel": channel_id,
+        })
+    };
     println!("{}", to_json_output(&output));
 
     Ok(())
@@ -241,22 +247,25 @@ async fn handle_channel_new(opts: ChannelNewOptions) -> Result<()> {
 
     let channel = client.create_channel(&opts.name, opts.private).await?;
 
-    let channel_id = channel
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    let name = channel
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&opts.name)
-        .to_string();
-
-    let output = json!({
-        "ok": true,
-        "channel_id": channel_id,
-        "name": name,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        let channel_id = channel
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let name = channel
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&opts.name)
+            .to_string();
+        json!({
+            "ok": true,
+            "channel_id": channel_id,
+            "name": name,
+        })
+    };
     println!("{}", to_json_output(&output));
 
     Ok(())
@@ -272,11 +281,15 @@ async fn handle_channel_invite(opts: ChannelInviteOptions) -> Result<()> {
     let invited_count = opts.users.len();
     client.invite_to_channel(&channel_id, &opts.users).await?;
 
-    let output = json!({
-        "ok": true,
-        "channel_id": channel_id,
-        "invited_count": invited_count,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        json!({
+            "ok": true,
+            "channel_id": channel_id,
+            "invited_count": invited_count,
+        })
+    };
     println!("{}", to_json_output(&output));
 
     Ok(())
@@ -290,17 +303,20 @@ async fn handle_channel_rename(channel: &str, new_name: &str, workspace: Option<
 
     let channel_info = client.rename_channel(&channel_id, new_name).await?;
 
-    let name = channel_info
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or(new_name)
-        .to_string();
-
-    let output = json!({
-        "ok": true,
-        "channel_id": channel_id,
-        "name": name,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        let name = channel_info
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(new_name)
+            .to_string();
+        json!({
+            "ok": true,
+            "channel_id": channel_id,
+            "name": name,
+        })
+    };
     println!("{}", to_json_output(&output));
 
     Ok(())

@@ -16,10 +16,14 @@ pub async fn handle_dm_open(
 
     let resp = client.open_conversation(user_ids).await?;
 
-    let output = json!({
-        "ok": true,
-        "channel_id": resp.id,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        json!({
+            "ok": true,
+            "channel_id": resp.id,
+        })
+    };
 
     println!("{}", to_json_output(&output));
     Ok(())
@@ -48,17 +52,20 @@ pub async fn handle_dm_send(
     ];
     let response = client.api_call("chat.postMessage", params).await?;
 
-    let ts = response
-        .get("ts")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    let output = json!({
-        "ok": true,
-        "channel_id": channel_id,
-        "ts": ts,
-    });
+    let output = if crate::output::is_quiet() {
+        json!({ "ok": true })
+    } else {
+        let ts = response
+            .get("ts")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        json!({
+            "ok": true,
+            "channel_id": channel_id,
+            "ts": ts,
+        })
+    };
 
     println!("{}", to_json_output(&output));
     Ok(())

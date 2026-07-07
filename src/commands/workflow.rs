@@ -79,6 +79,10 @@ async fn handle_workflow_run(
     let shortcut_url = resolve_shortcut_url(&client, &channel_id, trigger_id).await?;
     let result = run_workflow(&client, &shortcut_url, &channel_id, trigger_id).await?;
 
-    println!("{}", to_json_output(&result));
+    if crate::output::is_quiet() {
+        println!("{}", to_json_output(&serde_json::json!({ "ok": true })));
+    } else {
+        println!("{}", to_json_output(&result));
+    }
     Ok(())
 }
