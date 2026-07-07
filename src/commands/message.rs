@@ -26,7 +26,8 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
             workspace,
             thread_ts,
             reply_broadcast,
-        } => handle_message_send(&target, &text, workspace.as_deref(), thread_ts.as_deref(), reply_broadcast).await,
+            blocks,
+        } => handle_message_send(&target, &text, workspace.as_deref(), thread_ts.as_deref(), reply_broadcast, blocks.as_deref()).await,
         MessageCommand::React { subcommand } => handle_react(subcommand).await,
         MessageCommand::History { channel, options } => {
             handle_message_history(&channel, options).await
@@ -319,19 +320,72 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
     Ok(())
 }
 
+fn load_blocks_from_path(path: &str) -> Result<Value> {
+    let raw = if path == "-" {
+        use std::io::Read;
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .map_err(|e| SlackersError::Other(format!("--blocks: failed to read stdin: {}", e)))?;
+        buf
+    } else {
+        std::fs::read_to_string(path)
+            .map_err(|e| SlackersError::Other(format!("--blocks: failed to read {}: {}", path, e)))?
+    };
+
+    let parsed: Value = serde_json::from_str(&raw)
+        .map_err(|e| {
+            let source = if path == "-" { "stdin" } else { path };
+            SlackersError::Other(format!("--blocks: failed to parse JSON from {}: {}", source, e))
+        })?;
+
+    let arr = parsed.as_array().ok_or_else(|| {
+        SlackersError::Other(format!(
+            "--blocks: expected a JSON array of Block Kit blocks, got {}",
+            value_type_name(&parsed)
+        ))
+    })?;
+
+    for (i, el) in arr.iter().enumerate() {
+        if !el.is_object() {
+            return Err(SlackersError::Other(format!(
+                "--blocks: element at index {} is not a Block Kit block object (got {})",
+                i,
+                value_type_name(el)
+            )));
+        }
+    }
+
+    Ok(parsed)
+}
+
+fn value_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
 async fn handle_message_send(
     target: &str,
     text: &str,
     workspace: Option<&str>,
     thread_ts: Option<&str>,
     reply_broadcast: bool,
+    blocks_path: Option<&str>,
 ) -> Result<()> {
+    // Load blocks from file/stdin if provided
+    let blocks = blocks_path.map(load_blocks_from_path).transpose()?;
+
     // Parse target
     let msg_target = parse_msg_target(target)?;
 
     let (channel_id, workspace_url, auto_thread_ts) = match msg_target {
         MsgTarget::Url(msg_ref) => {
-            // URL targets auto-thread to the message
             let auto_ts = if thread_ts.is_none() {
                 Some(msg_ref.message_ts.clone())
             } else {
@@ -352,6 +406,10 @@ async fn handle_message_send(
         ("channel".to_string(), channel_id),
         ("text".to_string(), formatted_text),
     ];
+
+    if let Some(ref blocks_val) = blocks {
+        params.push(("blocks".to_string(), serde_json::to_string(blocks_val).unwrap()));
+    }
 
     // Add thread_ts if provided or auto-detected
     if let Some(ts) = thread_ts.or(auto_thread_ts.as_deref()) {
@@ -812,6 +870,7 @@ async fn handle_thread_participants(
 
 #[cfg(test)]
 mod tests {
+    use super::{load_blocks_from_path, value_type_name};
     use serde_json::json;
     use crate::render::format::{Formattable, OutputFormat};
 
@@ -890,6 +949,87 @@ mod tests {
         assert_eq!(filtered.len(), 2);
         assert_eq!(filtered[0]["ts"], "2.0");
         assert_eq!(filtered[1]["ts"], "3.0");
+    }
+
+    #[test]
+    fn test_load_blocks_valid_array() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_blocks_valid.json");
+        std::fs::write(&path, r#"[{"type":"section","text":{"type":"mrkdwn","text":"Hello"}}]"#).unwrap();
+        let result = load_blocks_from_path(path.to_str().unwrap());
+        assert!(result.is_ok());
+        let blocks = result.unwrap();
+        assert!(blocks.is_array());
+        assert_eq!(blocks.as_array().unwrap().len(), 1);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_blocks_non_array_json() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_blocks_non_array.json");
+        std::fs::write(&path, r#"{"type":"section"}"#).unwrap();
+        let result = load_blocks_from_path(path.to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("expected a JSON array"), "Error: {}", err);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_blocks_malformed_json() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_blocks_malformed.json");
+        std::fs::write(&path, "not json at all").unwrap();
+        let result = load_blocks_from_path(path.to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("failed to parse JSON"), "Error: {}", err);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_blocks_non_object_element() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_blocks_non_object.json");
+        std::fs::write(&path, r#"[{"type":"section"}, "not_an_object"]"#).unwrap();
+        let result = load_blocks_from_path(path.to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("element at index 1"), "Error: {}", err);
+        assert!(err.contains("not a Block Kit block object"), "Error: {}", err);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_blocks_null_element() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("test_blocks_null_elem.json");
+        std::fs::write(&path, r#"[null]"#).unwrap();
+        let result = load_blocks_from_path(path.to_str().unwrap());
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("element at index 0"), "Error: {}", err);
+        assert!(err.contains("null"), "Error: {}", err);
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn test_load_blocks_file_not_found() {
+        let result = load_blocks_from_path("/nonexistent/path/blocks.json");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("failed to read"), "Error: {}", err);
+    }
+
+    #[test]
+    fn test_value_type_name() {
+        assert_eq!(value_type_name(&json!(null)), "null");
+        assert_eq!(value_type_name(&json!(true)), "boolean");
+        assert_eq!(value_type_name(&json!(42)), "number");
+        assert_eq!(value_type_name(&json!("hello")), "string");
+        assert_eq!(value_type_name(&json!([])), "array");
+        assert_eq!(value_type_name(&json!({})), "object");
     }
 }
 

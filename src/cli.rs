@@ -282,7 +282,7 @@ pub enum MessageCommand {
         /// Slack message URL, #name/name, or channel id
         target: String,
 
-        /// Message text to post
+        /// Message text to post (used as notification fallback when --blocks is provided)
         text: String,
 
         /// Workspace URL (needed when using #channel/channel id and you have multiple workspaces)
@@ -296,6 +296,10 @@ pub enum MessageCommand {
         /// Also broadcast the threaded reply to the channel (reply_broadcast)
         #[arg(long)]
         reply_broadcast: bool,
+
+        /// Path to a JSON file containing a Block Kit blocks array (use - for stdin)
+        #[arg(long)]
+        blocks: Option<String>,
     },
 
     /// Add or remove reactions
