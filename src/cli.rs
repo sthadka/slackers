@@ -431,7 +431,7 @@ pub struct MessageHistoryOptions {
     pub before: Option<String>,
 
     /// Max message body characters (-1 for unlimited, default 8000)
-    #[arg(long, default_value = "8000")]
+    #[arg(long, default_value = "8000", allow_negative_numbers = true)]
     pub max_body_chars: i32,
 
     /// Fetch and inline full thread replies for threaded messages
@@ -464,7 +464,7 @@ pub struct MessageGetOptions {
     pub thread_ts: Option<String>,
 
     /// Max content characters to include (default 8000, -1 for unlimited)
-    #[arg(long, default_value = "8000")]
+    #[arg(long, default_value = "8000", allow_negative_numbers = true)]
     pub max_body_chars: i32,
 
     /// Include reactions + reacting users
@@ -495,7 +495,7 @@ pub struct MessageListOptions {
     pub ts: Option<String>,
 
     /// Max content characters to include (default 8000, -1 for unlimited)
-    #[arg(long, default_value = "8000")]
+    #[arg(long, default_value = "8000", allow_negative_numbers = true)]
     pub max_body_chars: i32,
 
     /// Include reactions + reacting users
