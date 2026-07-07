@@ -74,15 +74,15 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
         Command::Channel { subcommand } => match subcommand {
             ChannelCommand::List { .. }
             | ChannelCommand::Get { .. }
-            | ChannelCommand::Members(..)
-            | ChannelCommand::Rename { .. } => {
+            | ChannelCommand::Members(..) => {
                 channel::handle_channel(subcommand).await
             }
             ChannelCommand::New(..)
             | ChannelCommand::Join { .. }
             | ChannelCommand::Leave { .. }
             | ChannelCommand::Invite(..)
-            | ChannelCommand::Mark(..) => {
+            | ChannelCommand::Mark(..)
+            | ChannelCommand::Rename { .. } => {
                 check_read_only(read_only)?;
                 channel::handle_channel(subcommand).await
             }

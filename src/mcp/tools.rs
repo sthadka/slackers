@@ -464,7 +464,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                 },
                 "required": ["channel", "name"]
             }),
-            is_write: false,
+            is_write: true,
         },
         // ---- Batch (write) ----
         ToolDef {
@@ -1312,6 +1312,7 @@ mod tests {
         assert!(write_names.contains(&"message_send"));
         assert!(write_names.contains(&"message_delete"));
         assert!(write_names.contains(&"dm_send"));
+        assert!(write_names.contains(&"channel_rename"));
         assert!(!write_names.contains(&"message_get"));
         assert!(!write_names.contains(&"search_messages"));
     }
