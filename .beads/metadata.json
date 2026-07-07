@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "slackers",
-  "project_id": "35634a99-4be6-4719-91ca-32fb48e34fc7"
-}
