@@ -524,12 +524,16 @@ impl SlackClient {
         channel: &str,
         ts: &str,
         text: &str,
+        blocks: Option<&[serde_json::Value]>,
     ) -> Result<ChatUpdateResponse> {
-        let params = vec![
+        let mut params = vec![
             ("channel".to_string(), channel.to_string()),
             ("ts".to_string(), ts.to_string()),
             ("text".to_string(), text.to_string()),
         ];
+        if let Some(blocks_val) = blocks {
+            params.push(("blocks".to_string(), serde_json::to_string(blocks_val).unwrap()));
+        }
         let body = match self.api_call("chat.update", params).await {
             Ok(b) => b,
             Err(SlackersError::SlackApi { error_code: Some(ref code), .. })

@@ -7,8 +7,8 @@ use crate::output::to_json_output;
 use crate::render::format::OutputFormat;
 use crate::slack::{
     download_file, fetch_message, fetch_thread, filter_messages, format_outbound_slack_text,
-    get_thread_summary, get_user, resolve_channel_id, to_compact_message, CompactMessageOptions,
-    MessageFilter, SlackClient,
+    get_thread_summary, get_user, resolve_channel_id, text_to_rich_text_blocks,
+    to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
 use crate::target::{parse_msg_target, MsgTarget};
 use chrono::NaiveDate;
@@ -1061,7 +1061,9 @@ async fn handle_message_update(opts: MessageUpdateOptions) -> Result<()> {
     let auth_result = resolve_auth(opts.workspace.as_deref())?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
     let formatted_text = format_outbound_slack_text(&opts.text);
-    let resp = client.update_message(&opts.channel, &opts.ts, &formatted_text).await?;
+    let rich_blocks = text_to_rich_text_blocks(&opts.text);
+    let blocks_slice = rich_blocks.as_deref();
+    let resp = client.update_message(&opts.channel, &opts.ts, &formatted_text, blocks_slice).await?;
     println!("{}", to_json_output(&json!({ "ok": true, "ts": resp.ts, "text": resp.text })));
     Ok(())
 }
