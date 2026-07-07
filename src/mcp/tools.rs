@@ -23,6 +23,10 @@ fn arr_prop(desc: &str) -> Value {
     json!({"type": "array", "items": {"type": "string"}, "description": desc})
 }
 
+fn enum_prop(desc: &str, values: &[&str]) -> Value {
+    json!({"type": "string", "description": desc, "enum": values})
+}
+
 pub fn all_tools() -> Vec<ToolDef> {
     vec![
         // ---- Message (read) ----
@@ -55,7 +59,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "thread_ts": prop("Thread root ts"),
                     "ts": prop("Message ts (resolve to its thread)"),
                     "workspace": prop("Workspace URL"),
-                    "format": prop("Output format: json, table, markdown, plain"),
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"]),
                     "max_body_chars": int_prop("Max content chars (default 8000, -1 unlimited)"),
                     "include_reactions": bool_prop("Include reactions"),
                     "limit": int_prop("Max messages to return (default 100)"),
@@ -223,15 +227,15 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "properties": {
                     "query": prop("Search query string"),
                     "workspace": prop("Workspace URL"),
-                    "format": prop("Output format: json, table, markdown, plain"),
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"]),
                     "channel": arr_prop("Channel filter (#name, name, or ID)"),
                     "user": prop("User filter (@name, name, or U...)"),
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
                     "max_content_chars": int_prop("Max message chars (default 4000)"),
-                    "sort": prop("Sort: timestamp or relevance"),
-                    "content_type": prop("Filter by content type: any, text, image, snippet, file"),
+                    "sort": enum_prop("Sort order", &["timestamp", "relevance"]),
+                    "content_type": enum_prop("Filter by content type", &["any", "text", "image", "snippet", "file"]),
                     "has_link": bool_prop("Only with links"),
                     "has_emoji": bool_prop("Only with reactions"),
                     "from_me": bool_prop("Only from authenticated user"),
@@ -250,15 +254,15 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "properties": {
                     "query": prop("Search query string"),
                     "workspace": prop("Workspace URL"),
-                    "format": prop("Output format: json, table, markdown, plain"),
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"]),
                     "channel": arr_prop("Channel filter"),
                     "user": prop("User filter"),
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
                     "max_content_chars": int_prop("Max content chars (default 4000)"),
-                    "sort": prop("Sort: timestamp or relevance"),
-                    "content_type": prop("Filter by content type: any, text, image, snippet, file"),
+                    "sort": enum_prop("Sort order", &["timestamp", "relevance"]),
+                    "content_type": enum_prop("Filter by content type", &["any", "text", "image", "snippet", "file"]),
                     "has_link": bool_prop("Only with links"),
                     "has_emoji": bool_prop("Only with reactions"),
                     "from_me": bool_prop("Only from authenticated user"),
@@ -277,15 +281,15 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "properties": {
                     "query": prop("Search query string"),
                     "workspace": prop("Workspace URL"),
-                    "format": prop("Output format: json, table, markdown, plain"),
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"]),
                     "channel": arr_prop("Channel filter"),
                     "user": prop("User filter"),
                     "after": prop("Only after YYYY-MM-DD"),
                     "before": prop("Only before YYYY-MM-DD"),
                     "limit": int_prop("Max results (default 20)"),
                     "max_content_chars": int_prop("Max content chars (default 4000)"),
-                    "sort": prop("Sort: timestamp or relevance"),
-                    "content_type": prop("Filter by content type: any, text, image, snippet, file"),
+                    "sort": enum_prop("Sort order", &["timestamp", "relevance"]),
+                    "content_type": enum_prop("Filter by content type", &["any", "text", "image", "snippet", "file"]),
                     "has_link": bool_prop("Only with links"),
                     "has_emoji": bool_prop("Only with reactions"),
                     "from_me": bool_prop("Only from authenticated user"),
@@ -321,7 +325,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "workspace": prop("Workspace URL"),
                     "limit": int_prop("Max users (default 200)"),
                     "include_bots": bool_prop("Include bot users"),
-                    "format": prop("Output format: json, table, markdown, plain")
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"])
                 }
             }),
             is_write: false,
@@ -352,7 +356,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "limit": int_prop("Max channels (default 200)"),
                     "resolve_users": bool_prop("Resolve user IDs for DMs"),
                     "all": bool_prop("Show all channels, not just joined"),
-                    "format": prop("Output format: json, table, markdown, plain")
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"])
                 }
             }),
             is_write: false,
@@ -700,7 +704,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                 "type": "object",
                 "properties": {
                     "channel": prop("Channel ID (C...) or #name/name"),
-                    "format": prop("Output format: json, csv, html (default json)"),
+                    "format": enum_prop("Output format (default json)", &["json", "csv", "html"]),
                     "output": prop("Output file path (defaults to stdout)"),
                     "workspace": prop("Workspace URL")
                 },
@@ -719,7 +723,7 @@ pub fn all_tools() -> Vec<ToolDef> {
                     "max_messages": int_prop("Max unread messages per channel (default 10)"),
                     "max_body_chars": int_prop("Max chars per message (default 4000, -1 unlimited)"),
                     "include_system": bool_prop("Include system messages"),
-                    "format": prop("Output format: json, table, markdown, plain"),
+                    "format": enum_prop("Output format", &["json", "table", "markdown", "plain"]),
                     "workspace": prop("Workspace URL")
                 }
             }),
