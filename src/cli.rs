@@ -86,6 +86,11 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: ExportCommand,
     },
+    /// Show unread messages across channels, DMs, and threads
+    Unreads {
+        #[command(subcommand)]
+        subcommand: UnreadsCommand,
+    },
 }
 
 // ============================================================================
@@ -1145,6 +1150,43 @@ pub struct ExportChannelOptions {
     pub output: Option<String>,
 
     /// Workspace URL (needed when you have multiple workspaces)
+    #[arg(long)]
+    pub workspace: Option<String>,
+}
+
+// ============================================================================
+// Unreads Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum UnreadsCommand {
+    /// Show unread messages across all conversations
+    Show(UnreadsShowOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct UnreadsShowOptions {
+    /// Only show unread counts, do not fetch message content
+    #[arg(long)]
+    pub counts_only: bool,
+
+    /// Max unread messages to fetch per channel (default 10)
+    #[arg(long, default_value = "10")]
+    pub max_messages: usize,
+
+    /// Max content characters per message (default 4000, -1 for unlimited)
+    #[arg(long, default_value = "4000", allow_hyphen_values = true)]
+    pub max_body_chars: i64,
+
+    /// Include system messages (joins, leaves, topic changes, etc.)
+    #[arg(long)]
+    pub include_system: bool,
+
+    /// Output format: json, table, markdown, plain
+    #[arg(long)]
+    pub format: Option<String>,
+
+    /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]
     pub workspace: Option<String>,
 }

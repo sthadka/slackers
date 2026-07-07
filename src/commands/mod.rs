@@ -10,6 +10,7 @@ pub mod mention;
 pub mod later;
 pub mod scheduled;
 mod search;
+mod unreads;
 mod user;
 pub mod workspace;
 
@@ -89,6 +90,9 @@ pub async fn dispatch(command: Command) -> Result<()> {
                 .await
             }
         },
+        Command::Unreads { subcommand } => {
+            unreads::handle_unreads(subcommand).await
+        }
     }
 }
 

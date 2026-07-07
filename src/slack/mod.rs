@@ -10,6 +10,7 @@ pub mod search_files;
 pub mod search_messages;
 pub mod search_query;
 pub mod search_raw;
+pub mod unreads;
 pub mod users;
 
 pub use canvas::{fetch_canvas, parse_canvas_identifier};
