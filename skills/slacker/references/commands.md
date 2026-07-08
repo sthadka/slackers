@@ -22,6 +22,8 @@ Run `slackers --help` (or `slackers <command> --help`) for the full option list.
     - `--types <type>` repeatable (public_channel, private_channel, mpim, im)
     - `--exclude-archived` (default: true)
     - `--limit <n>` (default `200`)
+    - `--all` (include channels you haven't joined)
+    - `--format <fmt>` (json/table/markdown/plain)
 
 - `slackers channel get <#channel|channel|C...>`
   - Get detailed information about a specific channel
@@ -65,6 +67,8 @@ Run `slackers --help` (or `slackers <command> --help`) for the full option list.
     - `--has-link` (only messages with links)
     - `--has-file` (only messages with file attachments)
     - `--has-reaction` (only messages with reactions)
+    - `--with-reaction <emoji>` (only messages with a specific reaction)
+    - `--without-reaction <emoji>` (exclude messages with a specific reaction)
 
 - `slackers message send <target> <text>`
   - If `<target>` is a Slack message URL, replies in that message's thread.
@@ -72,8 +76,17 @@ Run `slackers --help` (or `slackers <command> --help`) for the full option list.
   - Options:
     - `--workspace <url>` (needed for channel _names_ across multiple workspaces)
     - `--thread-ts <seconds>.<micros>` (optional, channel mode only)
+    - `--reply-broadcast` (broadcast thread reply to the channel)
+    - `--blocks <path|->`  (Block Kit JSON from file or stdin)
 
-- `slackers message react <target> <emoji>`
+- `slackers message react add <target> <emoji>`
+  - Add a reaction to a message
+  - Options (channel mode):
+    - `--workspace <url>` (needed for channel _names_ across multiple workspaces)
+    - `--ts <seconds>.<micros>` (required for channel targets)
+
+- `slackers message react remove <target> <emoji>`
+  - Remove a reaction from a message
   - Options (channel mode):
     - `--workspace <url>` (needed for channel _names_ across multiple workspaces)
     - `--ts <seconds>.<micros>` (required for channel targets)
@@ -150,6 +163,9 @@ Common options:
 - `slackers channel invite <target> --users <U1,U2,...> [--workspace <url>]`
   - Invite one or more users to a channel
 
+- `slackers channel rename <channel> <name> [--workspace <url>]`
+  - Rename a channel (accepts ID or name)
+
 ## Files
 
 - `slackers file upload --file <path> [--channels <C1,C2>] [--comment <text>] [--title <title>] [--filename <name>] [--workspace <url>]`
@@ -203,6 +219,53 @@ Common options:
 
 - `slackers export channel --channel <C...|#name> [--format json|csv|html] [--output <file>] [--workspace <url>]`
   - Export channel history in the requested format (default: json)
+
+## Unreads
+
+- `slackers unreads show [flags]`
+  - Show unread messages across all conversations (channels, DMs, threads)
+  - Options:
+    - `--counts-only` (show only unread counts, no message content)
+    - `--max-messages <n>` (default `10`, max previewed messages per conversation)
+    - `--max-body-chars <n>` (default `4000`, `-1` unlimited)
+    - `--include-system` (include join/leave/topic system messages)
+    - `--format <fmt>` (json/table/markdown/plain)
+    - `--workspace <url>`
+
+## Workflows
+
+- `slackers workflow list <channel> [--workspace <url>]`
+  - List workflows bookmarked or featured in a channel
+
+- `slackers workflow preview <trigger-id> [--workspace <url>]`
+  - Get workflow metadata from a trigger ID (read-only, no side effects)
+
+- `slackers workflow get <id> [--workspace <url>]`
+  - Get workflow definition including form fields and steps (accepts `Ft...` or `Wf...`)
+
+- `slackers workflow run <trigger-id> --channel <channel> [--workspace <url>]`
+  - Execute a workflow trigger
+
+## Slash Commands
+
+- `slackers slash run --channel <channel> <command...> [--workspace <url>]`
+  - Execute a slash command in a channel (requires browser token `xoxc-`)
+
+## MCP Server
+
+- `slackers serve`
+  - Start an MCP server over stdio (JSON-RPC 2.0)
+  - Exposes 45+ tools mapping to all CLI commands
+  - Respects `--read-only` global flag (write tools filtered from tool list)
+
+## Global Flags
+
+| Flag | Description |
+|------|-------------|
+| `--read-only` | Block all write operations |
+| `--pretty` | Produce indented JSON |
+| `--quiet` | Minimal `{"ok":true}` for write ops |
+| `--no-progress` | Suppress stderr spinners |
 
 ## Output Format Flag
 

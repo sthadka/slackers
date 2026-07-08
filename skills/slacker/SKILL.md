@@ -1,20 +1,24 @@
 ---
 name: slacker
 description: |
-  Slack automation CLI for AI agents. Use when:
+  Slack automation CLI and MCP server for AI agents. Use when:
   - Discovering channels in a workspace (list, search, get channel info, members)
-  - Managing channel membership (join, leave, invite, create channels)
+  - Managing channels (join, leave, invite, create, rename)
   - Reading a Slack message or thread (given a URL or channel+ts)
+  - Checking unread messages across all conversations
   - Downloading Slack attachments (snippets, images, files) to local paths
   - Searching Slack messages or files (advanced filters: user, date, has:link, etc.)
   - Sending a reply, DM, or batch messages; adding/removing reactions
+  - Sending messages with Block Kit blocks (--blocks flag)
   - Fetching a Slack canvas as markdown
   - Looking up Slack users, listing workspace users
   - Uploading, listing, or deleting files
   - Fetching workspace info, custom emoji, saved items, scheduled messages
   - Monitoring mentions; exporting channel history
+  - Running Slack Workflow Builder workflows or slash commands
+  - Starting an MCP server to expose Slack tools to AI agents (slackers serve)
   - Formatting output as JSON, table, markdown, or plain text (--format flag)
-  Triggers: "slack channel", "list channels", "join channel", "slack message", "slack thread", "slack URL", "slack link", "read slack", "reply on slack", "search slack", "slack DM", "slack file", "slack mention", "slack export", "slack workspace", "batch slack"
+  Triggers: "slack channel", "list channels", "join channel", "slack message", "slack thread", "slack URL", "slack link", "read slack", "reply on slack", "search slack", "slack DM", "slack file", "slack mention", "slack export", "slack workspace", "batch slack", "slack unread", "slack workflow", "slack MCP", "slackers serve"
 ---
 
 # Slack automation with `slackers`
@@ -100,7 +104,21 @@ slackers message list "https://workspace.slack.com/archives/C123/p17000000000000
 
 ```bash
 slackers message send "https://workspace.slack.com/archives/C123/p1700000000000000" "I can take this."
-slackers message react "https://workspace.slack.com/archives/C123/p1700000000000000" "eyes"
+slackers message react add "https://workspace.slack.com/archives/C123/p1700000000000000" "eyes"
+slackers message react remove "https://workspace.slack.com/archives/C123/p1700000000000000" "eyes"
+```
+
+Send with Block Kit blocks:
+
+```bash
+slackers message send "#general" "Fallback text" --blocks blocks.json
+echo '[{"type":"section","text":{"type":"mrkdwn","text":"*Bold*"}}]' | slackers message send "#general" "Fallback" --blocks -
+```
+
+Broadcast a thread reply to the channel:
+
+```bash
+slackers message send "<thread-url>" "Also visible in channel" --reply-broadcast
 ```
 
 ## Search (messages + files)
@@ -119,6 +137,31 @@ If you have multiple workspaces configured and you use a channel **name** (`#gen
 
 ```bash
 slackers message get "#general" --workspace "https://myteam.slack.com" --ts "1770165109.628379"
+```
+
+## Unreads
+
+```bash
+slackers unreads show                           # unread messages across all conversations
+slackers unreads show --counts-only             # just counts, no message content
+slackers unreads show --max-messages 5 --format table
+```
+
+## Workflows
+
+```bash
+slackers workflow list "#engineering"           # workflows bookmarked in a channel
+slackers workflow preview Ft123ABC              # preview workflow metadata
+slackers workflow get Ft123ABC                  # full definition with form fields + steps
+slackers workflow run Ft123ABC --channel "#engineering"  # run a workflow trigger
+```
+
+## Slash commands
+
+Execute slash commands programmatically (requires browser token `xoxc-`):
+
+```bash
+slackers slash run --channel "#general" /remind me "standup" every weekday at 9am
 ```
 
 ## Channel Discovery
@@ -145,6 +188,14 @@ slackers channel join "C0123456789"
 
 # Leave a channel (accepts both IDs and names)
 slackers channel leave "#random"
+```
+
+```bash
+# Create a new channel
+slackers channel new --name "project-beta" [--private]
+
+# Rename a channel
+slackers channel rename "#old-name" "new-name"
 ```
 
 **Performance tip:** Channel IDs (like `C0123456789`) are faster than names because Slack's API requires ID lookup. Use `channel list` first to get IDs, then use those IDs in subsequent commands.
@@ -248,6 +299,49 @@ slackers canvas get "https://workspace.slack.com/docs/T123/F456"
 slackers user list --workspace "https://workspace.slack.com" --limit 100
 slackers user get "@alice" --workspace "https://workspace.slack.com"
 ```
+
+## MCP Server
+
+`slackers serve` starts an MCP server over stdio, exposing 45+ tools to AI agents.
+
+```bash
+slackers serve
+```
+
+MCP client config (Claude Desktop, Claude Code, etc.):
+
+```json
+{
+  "mcpServers": {
+    "slack": {
+      "command": "slackers",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Read-only mode (write tools hidden):
+
+```json
+{
+  "mcpServers": {
+    "slack": {
+      "command": "slackers",
+      "args": ["--read-only", "serve"]
+    }
+  }
+}
+```
+
+## Global flags
+
+| Flag | Description |
+|------|-------------|
+| `--read-only` | Block all write operations |
+| `--pretty` | Indented JSON output |
+| `--quiet` | Minimal `{"ok":true}` for write ops |
+| `--no-progress` | Suppress stderr spinners |
 
 ## References
 
