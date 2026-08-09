@@ -4,7 +4,7 @@ use crate::error::Result;
 use crate::output::to_json_output;
 use crate::render::format::OutputFormat;
 use crate::slack::{get_user, list_users, SlackClient};
-use serde_json::json;
+use serde_json::{self, json};
 
 pub async fn handle_user(subcommand: UserCommand) -> Result<()> {
     match subcommand {
@@ -27,33 +27,41 @@ async fn handle_user_list(
     include_bots: bool,
     format: &str,
 ) -> Result<()> {
-    // Resolve auth
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
-    // List users
-    let users = list_users(&client, Some(limit as usize), include_bots).await?;
-
     let fmt = OutputFormat::from_str(format).unwrap_or_default();
-    let output = json!(users);
+    let streaming = fmt == OutputFormat::Json;
 
-    match fmt {
-        OutputFormat::Json => println!("{}", to_json_output(&output)),
-        _ => {
-            let headers = ["id", "name", "real_name"];
-            let rows: Vec<Vec<String>> = users
-                .iter()
-                .map(|u| {
-                    vec![
-                        u.id.clone(),
-                        u.name.clone().unwrap_or_default(),
-                        u.real_name.clone().unwrap_or_default(),
-                    ]
-                })
-                .collect();
-            println!("{}", fmt.render_rows(&headers, &rows));
+    let mut stream_page = |page: &[crate::slack::users::CompactSlackUser]| {
+        for u in page {
+            println!("{}", serde_json::to_string(u).unwrap());
         }
+    };
+
+    let users = list_users(
+        &client,
+        Some(limit as usize),
+        include_bots,
+        if streaming { Some(&mut stream_page) } else { None },
+    ).await?;
+
+    if streaming {
+        return Ok(());
     }
+
+    let headers = ["id", "name", "real_name"];
+    let rows: Vec<Vec<String>> = users
+        .iter()
+        .map(|u| {
+            vec![
+                u.id.clone(),
+                u.name.clone().unwrap_or_default(),
+                u.real_name.clone().unwrap_or_default(),
+            ]
+        })
+        .collect();
+    println!("{}", fmt.render_rows(&headers, &rows));
 
     Ok(())
 }

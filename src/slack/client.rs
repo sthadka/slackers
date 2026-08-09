@@ -588,6 +588,7 @@ impl SlackClient {
         &self,
         channel_id: &str,
         limit: Option<u32>,
+        mut on_page: Option<&mut dyn FnMut(&[String])>,
     ) -> Result<Vec<String>> {
         let page_size = limit.unwrap_or(200).to_string();
         let mut members: Vec<String> = Vec::new();
@@ -614,6 +615,11 @@ impl SlackClient {
                 })
                 .unwrap_or_default();
 
+            if let Some(ref mut cb) = on_page {
+                if !page.is_empty() {
+                    cb(&page);
+                }
+            }
             members.extend(page);
 
             cursor = body

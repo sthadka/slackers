@@ -33,6 +33,7 @@ pub async fn list_users(
     client: &SlackClient,
     limit: Option<usize>,
     include_bots: bool,
+    mut on_page: Option<&mut dyn FnMut(&[CompactSlackUser])>,
 ) -> Result<Vec<CompactSlackUser>> {
     let mut all_users = Vec::new();
     let mut cursor: Option<String> = None;
@@ -47,6 +48,8 @@ pub async fn list_users(
 
         let response = client.api_call("users.list", params).await?;
 
+        let mut page_users = Vec::new();
+
         if let Some(members) = response.get("members").and_then(|v| v.as_array()) {
             for member in members {
                 let is_bot = member
@@ -54,19 +57,30 @@ pub async fn list_users(
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
 
-                // Skip bots unless include_bots is true
                 if is_bot && !include_bots {
                     continue;
                 }
 
                 let compact = to_compact_user(member);
-                all_users.push(compact);
+                page_users.push(compact);
 
-                if all_users.len() >= effective_limit {
+                if all_users.len() + page_users.len() >= effective_limit {
+                    page_users.truncate(effective_limit - all_users.len());
+                    if let Some(ref mut cb) = on_page {
+                        cb(&page_users);
+                    }
+                    all_users.extend(page_users);
                     return Ok(all_users);
                 }
             }
         }
+
+        if let Some(ref mut cb) = on_page {
+            if !page_users.is_empty() {
+                cb(&page_users);
+            }
+        }
+        all_users.extend(page_users);
 
         // Check for pagination
         cursor = response
@@ -107,7 +121,7 @@ pub async fn get_user(client: &SlackClient, identifier: &str) -> Result<CompactS
     let handle = trimmed.strip_prefix('@').unwrap_or(trimmed);
 
     // Search through all users
-    let users = list_users(client, None, true).await?;
+    let users = list_users(client, None, true, None).await?;
 
     for user_value in users {
         let matches = user_matches_handle(&user_value, handle);

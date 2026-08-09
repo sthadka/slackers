@@ -42,11 +42,16 @@ pub struct CompactChannel {
 /// Returns a vector of compact channel representations.
 /// Supports filtering by types (public_channel, private_channel, mpim, im),
 /// excluding archived channels, and pagination.
+///
+/// When `member_only` is true, only channels where `is_member` is true are
+/// returned and counted against the limit, avoiding unnecessary pagination.
 pub async fn list_conversations(
     client: &SlackClient,
     types: Option<Vec<String>>,
     exclude_archived: bool,
     limit: Option<usize>,
+    member_only: bool,
+    mut on_page: Option<&mut dyn FnMut(&[CompactChannel])>,
 ) -> Result<Vec<CompactChannel>> {
     let mut all_channels = Vec::new();
     let mut cursor: Option<String> = None;
@@ -70,16 +75,35 @@ pub async fn list_conversations(
 
         let response = client.api_call("conversations.list", params).await?;
 
+        let mut page_channels = Vec::new();
+
         if let Some(channels) = response.get("channels").and_then(|v| v.as_array()) {
             for channel in channels {
                 let compact = to_compact_channel(channel);
-                all_channels.push(compact);
 
-                if all_channels.len() >= effective_limit {
+                if member_only && compact.is_member != Some(true) {
+                    continue;
+                }
+
+                page_channels.push(compact);
+
+                if all_channels.len() + page_channels.len() >= effective_limit {
+                    page_channels.truncate(effective_limit - all_channels.len());
+                    if let Some(ref mut cb) = on_page {
+                        cb(&page_channels);
+                    }
+                    all_channels.extend(page_channels);
                     return Ok(all_channels);
                 }
             }
         }
+
+        if let Some(ref mut cb) = on_page {
+            if !page_channels.is_empty() {
+                cb(&page_channels);
+            }
+        }
+        all_channels.extend(page_channels);
 
         // Check for pagination
         cursor = response

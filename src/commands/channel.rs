@@ -7,7 +7,7 @@ use crate::slack::{
     get_conversation_info, get_user, join_conversation, leave_conversation, list_conversations,
     SlackClient,
 };
-use serde_json::json;
+use serde_json::{self, json};
 
 pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
     match subcommand {
@@ -55,24 +55,29 @@ async fn handle_channel_list(
     let auth_result = resolve_auth(workspace)?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
-    let fetch_limit = if all { Some(limit as usize) } else { None };
-    let fetched = list_conversations(
+    let member_only = !all;
+    let fmt = OutputFormat::from_str(format).unwrap_or_default();
+    let streaming = fmt == OutputFormat::Json && !resolve_users;
+
+    let mut stream_page = |page: &[crate::slack::channels::CompactChannel]| {
+        for ch in page {
+            println!("{}", serde_json::to_string(ch).unwrap());
+        }
+    };
+
+    let mut channels = list_conversations(
         &client,
         types,
         exclude_archived,
-        fetch_limit,
+        Some(limit as usize),
+        member_only,
+        if streaming { Some(&mut stream_page) } else { None },
     )
     .await?;
 
-    let mut channels: Vec<_> = if all {
-        fetched
-    } else {
-        fetched
-            .into_iter()
-            .filter(|ch| ch.is_member == Some(true))
-            .take(limit as usize)
-            .collect()
-    };
+    if streaming {
+        return Ok(());
+    }
 
     if resolve_users {
         for ch in &mut channels {
@@ -89,11 +94,8 @@ async fn handle_channel_list(
         }
     }
 
-    let fmt = OutputFormat::from_str(format).unwrap_or_default();
-    let output = json!(channels);
-
     match fmt {
-        OutputFormat::Json => println!("{}", to_json_output(&output)),
+        OutputFormat::Json => println!("{}", to_json_output(&json!(channels))),
         _ => {
             let headers = ["id", "name", "type"];
             let rows: Vec<Vec<String>> = channels
@@ -201,31 +203,43 @@ async fn handle_channel_mark(opts: ChannelMarkOptions) -> Result<()> {
 }
 
 async fn handle_channel_members(opts: ChannelMembersOptions) -> Result<()> {
-    // Resolve auth
     let auth_result = resolve_auth(opts.workspace.as_deref())?;
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
-    // Resolve channel name → ID
     let channel_id = crate::slack::channels::resolve_channel_id(&client, &opts.target).await?;
 
-    // Fetch member IDs
-    let member_ids = client.list_channel_members(&channel_id, None).await?;
-    let member_count = member_ids.len();
+    let streaming = !opts.resolve_users;
 
-    // Optionally resolve user IDs to display names
+    let mut stream_page = |page: &[String]| {
+        for user_id in page {
+            println!("{}", json!({ "user_id": user_id }));
+        }
+    };
+
+    let member_ids = client
+        .list_channel_members(
+            &channel_id,
+            None,
+            if streaming { Some(&mut stream_page) } else { None },
+        )
+        .await?;
+
+    if streaming {
+        return Ok(());
+    }
+
+    let member_count = member_ids.len();
     let mut members: Vec<serde_json::Value> = Vec::new();
     for user_id in &member_ids {
         let mut entry = json!({ "user_id": user_id });
-        if opts.resolve_users {
-            if let Ok(user) = get_user(&client, user_id).await {
-                let name = user
-                    .display_name
-                    .filter(|s| !s.is_empty())
-                    .or(user.real_name)
-                    .or(user.name);
-                if let Some(n) = name {
-                    entry["name"] = json!(n);
-                }
+        if let Ok(user) = get_user(&client, user_id).await {
+            let name = user
+                .display_name
+                .filter(|s| !s.is_empty())
+                .or(user.real_name)
+                .or(user.name);
+            if let Some(n) = name {
+                entry["name"] = json!(n);
             }
         }
         members.push(entry);
