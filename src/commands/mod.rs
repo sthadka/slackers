@@ -18,8 +18,9 @@ pub mod workspace;
 
 use crate::cli::{
     BatchCommand, ChannelCommand, Command, DmCommand, EmojiCommand, ExportCommand,
-    FileCommand, LaterCommand, MentionCommand, MessageCommand, ReactCommand,
-    ScheduledCommand, SlashCommand, WorkflowCommand, WorkspaceCommand,
+    FileCommand, LaterCommand, MentionCommand, MentionListOptions, MessageCommand,
+    ReactCommand, ScheduledCommand, SlashCommand, UnreadsCommand, UnreadsShowOptions,
+    WorkflowCommand, WorkspaceCommand, WorkspaceInfoOptions, EmojiListOptions,
 };
 use crate::error::{Result, SlackersError};
 
@@ -103,16 +104,26 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
                 file::handle_file(subcommand).await
             }
         },
-        Command::Workspace { subcommand } => match subcommand {
-            WorkspaceCommand::Info(opts) => {
-                workspace::handle_workspace_info(opts.workspace.as_deref()).await
+        Command::Workspace { subcommand } => {
+            let sub = subcommand.unwrap_or(WorkspaceCommand::Info(WorkspaceInfoOptions {
+                workspace: None,
+            }));
+            match sub {
+                WorkspaceCommand::Info(opts) => {
+                    workspace::handle_workspace_info(opts.workspace.as_deref()).await
+                }
             }
-        },
-        Command::Emoji { subcommand } => match subcommand {
-            EmojiCommand::List(opts) => {
-                workspace::handle_emoji_list(opts.workspace.as_deref()).await
+        }
+        Command::Emoji { subcommand } => {
+            let sub = subcommand.unwrap_or(EmojiCommand::List(EmojiListOptions {
+                workspace: None,
+            }));
+            match sub {
+                EmojiCommand::List(opts) => {
+                    workspace::handle_emoji_list(opts.workspace.as_deref()).await
+                }
             }
-        },
+        }
         Command::Later { subcommand } => match subcommand {
             LaterCommand::List(opts) => later::handle_later_list(opts).await,
             LaterCommand::Add(opts) => {
@@ -140,20 +151,31 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
                 dm::handle_dm_send(opts.workspace.as_deref(), opts.users, opts.message).await
             }
         },
-        Command::Mention { subcommand } => match subcommand {
-            MentionCommand::List(opts) => {
-                mention::handle_mention_list(
-                    opts.workspace.as_deref(),
-                    opts.username,
-                    opts.channel,
-                    opts.after,
-                    opts.before,
-                    opts.limit,
-                    opts.max_body_chars,
-                )
-                .await
+        Command::Mention { subcommand } => {
+            let sub = subcommand.unwrap_or(MentionCommand::List(MentionListOptions {
+                username: None,
+                channel: Vec::new(),
+                after: None,
+                before: None,
+                limit: 20,
+                workspace: None,
+                max_body_chars: 4000,
+            }));
+            match sub {
+                MentionCommand::List(opts) => {
+                    mention::handle_mention_list(
+                        opts.workspace.as_deref(),
+                        opts.username,
+                        opts.channel,
+                        opts.after,
+                        opts.before,
+                        opts.limit,
+                        opts.max_body_chars,
+                    )
+                    .await
+                }
             }
-        },
+        }
         Command::Export { subcommand } => match subcommand {
             ExportCommand::Channel(opts) => {
                 export::run_export(
@@ -166,7 +188,15 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
             }
         },
         Command::Unreads { subcommand } => {
-            unreads::handle_unreads(subcommand).await
+            let sub = subcommand.unwrap_or(UnreadsCommand::Show(UnreadsShowOptions {
+                counts_only: false,
+                max_messages: 10,
+                max_body_chars: 4000,
+                include_system: false,
+                format: None,
+                workspace: None,
+            }));
+            unreads::handle_unreads(sub).await
         }
         Command::Workflow { subcommand } => match subcommand {
             WorkflowCommand::List { .. }
@@ -179,12 +209,21 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
                 workflow::handle_workflow(subcommand).await
             }
         },
-        Command::Slash { subcommand } => match subcommand {
-            SlashCommand::Run(..) => {
-                check_read_only(read_only)?;
-                slash::handle_slash(subcommand).await
+        Command::Slash { subcommand } => {
+            let sub = subcommand.ok_or_else(|| {
+                SlackersError::Other(
+                    "Usage: slackers slash run --channel <CHANNEL> <COMMAND>...\n\
+                     Provide --channel and the slash command to execute."
+                        .to_string(),
+                )
+            })?;
+            match sub {
+                SlashCommand::Run(..) => {
+                    check_read_only(read_only)?;
+                    slash::handle_slash(sub).await
+                }
             }
-        },
+        }
         Command::Serve => {
             crate::mcp::run_server(read_only).await
         }

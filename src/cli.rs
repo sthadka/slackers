@@ -105,9 +105,10 @@ pub enum Command {
         subcommand: DmCommand,
     },
     /// Show unread messages
+    #[command(subcommand_required = false)]
     Unreads {
         #[command(subcommand)]
-        subcommand: UnreadsCommand,
+        subcommand: Option<UnreadsCommand>,
     },
 
     // ── CONTENT ──────────────────────────────────────────────────────────────
@@ -136,14 +137,16 @@ pub enum Command {
         subcommand: UserCommand,
     },
     /// List custom emoji
+    #[command(subcommand_required = false)]
     Emoji {
         #[command(subcommand)]
-        subcommand: EmojiCommand,
+        subcommand: Option<EmojiCommand>,
     },
     /// Workspace info (name, domain, icon)
+    #[command(subcommand_required = false)]
     Workspace {
         #[command(subcommand)]
-        subcommand: WorkspaceCommand,
+        subcommand: Option<WorkspaceCommand>,
     },
 
     // ── AUTOMATION ───────────────────────────────────────────────────────────
@@ -164,9 +167,10 @@ pub enum Command {
         subcommand: BatchCommand,
     },
     /// Execute slash commands
+    #[command(subcommand_required = false)]
     Slash {
         #[command(subcommand)]
-        subcommand: SlashCommand,
+        subcommand: Option<SlashCommand>,
     },
 
     // ── OTHER ────────────────────────────────────────────────────────────────
@@ -177,9 +181,10 @@ pub enum Command {
         subcommand: LaterCommand,
     },
     /// List @mentions
+    #[command(subcommand_required = false)]
     Mention {
         #[command(subcommand)]
-        subcommand: MentionCommand,
+        subcommand: Option<MentionCommand>,
     },
     /// Manage authentication
     Auth {
