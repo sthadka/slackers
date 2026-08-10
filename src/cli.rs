@@ -32,7 +32,7 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: AuthCommand,
     },
-    /// Read/write Slack messages (token-efficient JSON)
+    /// Read, send, and manage Slack messages
     Message {
         #[command(subcommand)]
         subcommand: MessageCommand,
@@ -77,7 +77,7 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: EmojiCommand,
     },
-    /// Save messages for later (stars) and list saved items
+    /// Manage saved items (Slack's Later list)
     Later {
         #[command(subcommand)]
         subcommand: LaterCommand,
@@ -1295,7 +1295,7 @@ pub enum WorkflowCommand {
         workspace: Option<String>,
     },
 
-    /// Trip a workflow trigger
+    /// Execute a workflow trigger
     Run {
         /// Trigger ID (Ft...)
         trigger_id: String,
