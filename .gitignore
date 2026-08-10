@@ -57,6 +57,3 @@ Cargo.lock
 
 # TreeFlow context (auto-added)
 .beads/
-
-# Beads / Dolt files (added by bd init)
-.beads/proxieddb/
