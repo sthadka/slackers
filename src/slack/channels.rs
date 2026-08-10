@@ -65,7 +65,7 @@ pub async fn list_conversations(
     loop {
         let mut params = vec![
             ("types".to_string(), types_param.clone()),
-            ("limit".to_string(), "200".to_string()),
+            ("limit".to_string(), "999".to_string()),
             ("exclude_archived".to_string(), exclude_archived.to_string()),
         ];
 
