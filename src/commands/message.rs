@@ -20,7 +20,7 @@ use std::time::Duration;
 pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
     match subcommand {
         MessageCommand::Get { target, options } => handle_message_get(&target, options).await,
-        MessageCommand::List { target, options } => handle_message_list(&target, options).await,
+        MessageCommand::Thread { target, options } => handle_message_list(&target, options).await,
         MessageCommand::Send {
             target,
             text,
@@ -30,7 +30,7 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
             blocks,
         } => handle_message_send(&target, &text, workspace.as_deref(), thread_ts.as_deref(), reply_broadcast, blocks.as_deref()).await,
         MessageCommand::React { subcommand } => handle_react(subcommand).await,
-        MessageCommand::History { channel, options } => {
+        MessageCommand::List { channel, options } => {
             handle_message_history(&channel, options).await
         }
         MessageCommand::ThreadParticipants {
@@ -126,7 +126,7 @@ async fn handle_message_get(target: &str, options: MessageGetOptions) -> Result<
     let mut downloaded_files = Vec::new();
     if let Some(files) = message.get("files").and_then(|v| v.as_array()) {
         for file in files {
-            match download_file(&client, file, &auth_result.auth).await {
+            match download_file(&client, file, &auth_result.auth, auth_result.workspace_url.as_deref()).await {
                 Ok(path) => {
                     downloaded_files.push(json!({
                         "id": file.get("id").and_then(|v| v.as_str()).unwrap_or(""),
@@ -269,7 +269,7 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
     for msg in &messages {
         if let Some(files) = msg.get("files").and_then(|v| v.as_array()) {
             for file in files {
-                match download_file(&client, file, &auth_result.auth).await {
+                match download_file(&client, file, &auth_result.auth, auth_result.workspace_url.as_deref()).await {
                     Ok(path) => {
                         all_downloaded_files.push(json!({
                             "id": file.get("id").and_then(|v| v.as_str()).unwrap_or(""),

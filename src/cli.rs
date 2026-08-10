@@ -326,7 +326,7 @@ pub enum MessageCommand {
     },
 
     /// Fetch the full thread for a Slack message URL
-    List {
+    Thread {
         /// Slack message URL, #channel, or channel ID
         target: String,
 
@@ -366,7 +366,7 @@ pub enum MessageCommand {
     },
 
     /// Fetch all messages from a channel, with optional thread expansion
-    History {
+    List {
         /// Channel name (#name) or ID (C...)
         channel: String,
 

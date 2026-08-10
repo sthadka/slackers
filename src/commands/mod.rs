@@ -40,8 +40,8 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
         }
         Command::Message { subcommand } => match subcommand {
             MessageCommand::Get { .. }
+            | MessageCommand::Thread { .. }
             | MessageCommand::List { .. }
-            | MessageCommand::History { .. }
             | MessageCommand::ThreadParticipants { .. } => {
                 message::handle_message(subcommand).await
             }

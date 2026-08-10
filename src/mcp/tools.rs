@@ -50,8 +50,8 @@ pub fn all_tools() -> Vec<ToolDef> {
             is_write: false,
         },
         ToolDef {
-            name: "message_list",
-            description: "List thread replies for a Slack message, or recent messages in a channel",
+            name: "message_thread",
+            description: "Fetch the full thread replies for a Slack message URL",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -79,7 +79,7 @@ pub fn all_tools() -> Vec<ToolDef> {
             is_write: false,
         },
         ToolDef {
-            name: "message_history",
+            name: "message_list",
             description: "Fetch all messages from a channel with optional thread expansion",
             input_schema: json!({
                 "type": "object",
@@ -841,9 +841,9 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             if bool_val(args, "resolve_users") { cli.push("--resolve-users".into()); }
             if bool_val(args, "refresh_users") { cli.push("--refresh-users".into()); }
         }
-        "message_list" => {
+        "message_thread" => {
             cli.push("message".into());
-            cli.push("list".into());
+            cli.push("thread".into());
             cli.push(str_req(args, "target"));
             if let Some(v) = str_val(args, "thread_ts") { cli.push("--thread-ts".into()); cli.push(v); }
             if let Some(v) = str_val(args, "ts") { cli.push("--ts".into()); cli.push(v); }
@@ -863,9 +863,9 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             if bool_val(args, "resolve_users") { cli.push("--resolve-users".into()); }
             if bool_val(args, "refresh_users") { cli.push("--refresh-users".into()); }
         }
-        "message_history" => {
+        "message_list" => {
             cli.push("message".into());
-            cli.push("history".into());
+            cli.push("list".into());
             cli.push(str_req(args, "channel"));
             if let Some(v) = str_val(args, "workspace") { cli.push("--workspace".into()); cli.push(v); }
             if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
