@@ -273,23 +273,30 @@ pub async fn resolve_channel_id(client: &SlackClient, input: &str) -> Result<Str
             if let Some(id) = cache.get(&name) {
                 return Ok(id.clone());
             }
-            let id = find_channel_by_name(client, &name).await?;
-            cache.insert(name, id.clone());
+            let id = find_channel_by_name(client, &name, &mut cache).await?;
             save_channel_cache(&cache);
             Ok(id)
         }
     }
 }
 
-/// Find a channel ID by name via conversations.list pagination
+/// Find a channel ID by name via conversations.list pagination.
+///
+/// Bulk-populates the cache with every channel seen during the scan so
+/// subsequent lookups for different channels can hit the cache.
 #[allow(dead_code)]
-async fn find_channel_by_name(client: &SlackClient, name: &str) -> Result<String> {
+async fn find_channel_by_name(
+    client: &SlackClient,
+    name: &str,
+    cache: &mut std::collections::HashMap<String, String>,
+) -> Result<String> {
     let mut cursor: Option<String> = None;
+    let mut found_id: Option<String> = None;
 
     loop {
         let mut params = vec![
             ("types".to_string(), "public_channel,private_channel".to_string()),
-            ("limit".to_string(), "200".to_string()),
+            ("limit".to_string(), "999".to_string()),
         ];
 
         if let Some(c) = &cursor {
@@ -298,20 +305,24 @@ async fn find_channel_by_name(client: &SlackClient, name: &str) -> Result<String
 
         let response = client.api_call("conversations.list", params).await?;
 
-        // Check channels array
         if let Some(channels) = response.get("channels").and_then(|v| v.as_array()) {
             for channel in channels {
-                if let Some(channel_name) = channel.get("name").and_then(|v| v.as_str()) {
+                if let (Some(channel_name), Some(id)) = (
+                    channel.get("name").and_then(|v| v.as_str()),
+                    channel.get("id").and_then(|v| v.as_str()),
+                ) {
+                    cache.insert(channel_name.to_string(), id.to_string());
                     if channel_name == name {
-                        if let Some(id) = channel.get("id").and_then(|v| v.as_str()) {
-                            return Ok(id.to_string());
-                        }
+                        found_id = Some(id.to_string());
                     }
                 }
             }
         }
 
-        // Check for next cursor
+        if found_id.is_some() {
+            return Ok(found_id.unwrap());
+        }
+
         cursor = response
             .get("response_metadata")
             .and_then(|m| m.get("next_cursor"))
