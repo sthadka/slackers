@@ -40,7 +40,7 @@ pub async fn list_users(
     let effective_limit = limit.unwrap_or(usize::MAX);
 
     loop {
-        let mut params = vec![("limit".to_string(), "200".to_string())];
+        let mut params = vec![("limit".to_string(), "999".to_string())];
 
         if let Some(c) = cursor {
             params.push(("cursor".to_string(), c));
