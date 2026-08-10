@@ -82,97 +82,111 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
-    /// Manage Slack authentication
-    Auth {
-        #[command(subcommand)]
-        subcommand: AuthCommand,
-    },
-    /// Read, send, and manage Slack messages
+    // ── CORE COMMANDS ────────────────────────────────────────────────────────
+    /// Read, send, and manage messages and threads
+    #[command(next_help_heading = "Core Commands")]
     Message {
         #[command(subcommand)]
         subcommand: MessageCommand,
     },
-    /// Search Slack messages and files (token-efficient JSON)
-    Search {
-        #[command(subcommand)]
-        subcommand: SearchCommand,
-    },
-    /// Work with Slack canvases
-    Canvas {
-        #[command(subcommand)]
-        subcommand: CanvasCommand,
-    },
-    /// Workspace user directory
-    User {
-        #[command(subcommand)]
-        subcommand: UserCommand,
-    },
-    /// Channel discovery and management
+    /// Discover and manage channels
     Channel {
         #[command(subcommand)]
         subcommand: ChannelCommand,
     },
-    /// Batch operations (send messages or add reactions to multiple targets)
-    Batch {
+    /// Search messages and files
+    Search {
         #[command(subcommand)]
-        subcommand: BatchCommand,
+        subcommand: SearchCommand,
     },
-    /// Upload, delete, or list Slack files
-    File {
-        #[command(subcommand)]
-        subcommand: FileCommand,
-    },
-    /// Workspace information (team name, domain, icon)
-    Workspace {
-        #[command(subcommand)]
-        subcommand: WorkspaceCommand,
-    },
-    /// Emoji directory for the workspace
-    Emoji {
-        #[command(subcommand)]
-        subcommand: EmojiCommand,
-    },
-    /// Manage saved items (Slack's Later list)
-    Later {
-        #[command(subcommand)]
-        subcommand: LaterCommand,
-    },
-    /// Schedule, list, and delete scheduled messages
-    Scheduled {
-        #[command(subcommand)]
-        subcommand: ScheduledCommand,
-    },
-    /// Open and send direct messages
+    /// Send direct messages
     Dm {
         #[command(subcommand)]
         subcommand: DmCommand,
     },
-    /// List messages that @mention you or a user
-    Mention {
-        #[command(subcommand)]
-        subcommand: MentionCommand,
-    },
-    /// Export channel history in various formats
-    Export {
-        #[command(subcommand)]
-        subcommand: ExportCommand,
-    },
-    /// Show unread messages across channels, DMs, and threads
+    /// Show unread messages
     Unreads {
         #[command(subcommand)]
         subcommand: UnreadsCommand,
     },
-    /// Discover and interact with Slack workflows
+
+    // ── CONTENT ──────────────────────────────────────────────────────────────
+    /// Upload, delete, and list files
+    #[command(next_help_heading = "Content")]
+    File {
+        #[command(subcommand)]
+        subcommand: FileCommand,
+    },
+    /// Read Slack canvases
+    Canvas {
+        #[command(subcommand)]
+        subcommand: CanvasCommand,
+    },
+    /// Export channel history
+    Export {
+        #[command(subcommand)]
+        subcommand: ExportCommand,
+    },
+
+    // ── WORKSPACE ────────────────────────────────────────────────────────────
+    /// Look up users
+    #[command(next_help_heading = "Workspace")]
+    User {
+        #[command(subcommand)]
+        subcommand: UserCommand,
+    },
+    /// List custom emoji
+    Emoji {
+        #[command(subcommand)]
+        subcommand: EmojiCommand,
+    },
+    /// Workspace info (name, domain, icon)
+    Workspace {
+        #[command(subcommand)]
+        subcommand: WorkspaceCommand,
+    },
+
+    // ── AUTOMATION ───────────────────────────────────────────────────────────
+    /// Schedule and manage delayed messages
+    #[command(next_help_heading = "Automation")]
+    Scheduled {
+        #[command(subcommand)]
+        subcommand: ScheduledCommand,
+    },
+    /// Discover and run Slack workflows
     Workflow {
         #[command(subcommand)]
         subcommand: WorkflowCommand,
     },
-    /// Execute slash commands in channels (requires browser token)
+    /// Send messages or react in bulk
+    Batch {
+        #[command(subcommand)]
+        subcommand: BatchCommand,
+    },
+    /// Execute slash commands
     Slash {
         #[command(subcommand)]
         subcommand: SlashCommand,
     },
-    /// Start an MCP (Model Context Protocol) server over stdio
+
+    // ── OTHER ────────────────────────────────────────────────────────────────
+    /// Manage saved items (Later list)
+    #[command(next_help_heading = "Other")]
+    Later {
+        #[command(subcommand)]
+        subcommand: LaterCommand,
+    },
+    /// List @mentions
+    Mention {
+        #[command(subcommand)]
+        subcommand: MentionCommand,
+    },
+    /// Manage authentication
+    Auth {
+        #[command(subcommand)]
+        subcommand: AuthCommand,
+    },
+    /// Start MCP server over stdio
     Serve,
 }
 
