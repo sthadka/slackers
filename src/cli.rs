@@ -226,6 +226,13 @@ pub struct SlashRunOptions {
 #[derive(Subcommand, Debug)]
 pub enum FileCommand {
     /// Upload a file to Slack
+    #[command(after_long_help = "\
+Examples:
+  # Upload a file to a channel
+  slackers file upload --file report.pdf --channels #general
+
+  # Upload with a title and comment
+  slackers file upload --file screenshot.png --channels #bugs --title \"Bug screenshot\" --comment \"See attached\"")]
     Upload(FileUploadOptions),
 
     /// Delete a file by ID
@@ -391,6 +398,16 @@ pub enum AuthCommand {
 #[derive(Subcommand, Debug)]
 pub enum MessageCommand {
     /// Fetch a single Slack message (with thread summary if any)
+    #[command(after_long_help = "\
+Examples:
+  # Get a message by URL
+  slackers message get https://myteam.slack.com/archives/C123/p1700000000000001
+
+  # Get by channel + timestamp, with reactions
+  slackers message get #general --ts 1700000000.000001 --include-reactions
+
+  # Resolve user IDs to display names
+  slackers message get #general --ts 1700000000.000001 --resolve-users")]
     Get {
         /// Slack message URL, #channel, or channel ID
         target: String,
@@ -400,6 +417,16 @@ pub enum MessageCommand {
     },
 
     /// Fetch the full thread for a Slack message URL
+    #[command(after_long_help = "\
+Examples:
+  # Read a thread by URL
+  slackers message thread https://myteam.slack.com/archives/C123/p1700000000000001
+
+  # Read a thread with limit and format as table
+  slackers message thread #general --thread-ts 1700000000.000001 --limit 50 --format table
+
+  # Filter thread to messages with reactions
+  slackers message thread #general --thread-ts 1700000000.000001 --has-reaction")]
     Thread {
         /// Slack message URL, #channel, or channel ID
         target: String,
@@ -409,6 +436,16 @@ pub enum MessageCommand {
     },
 
     /// Send a message (optionally into a thread)
+    #[command(after_long_help = "\
+Examples:
+  # Send to a channel
+  slackers message send #general \"Hello, world!\"
+
+  # Reply to a thread by URL
+  slackers message send https://myteam.slack.com/archives/C123/p170000 \"Got it, thanks!\"
+
+  # Send with Block Kit blocks from a file
+  slackers message send #general \"Fallback text\" --blocks blocks.json")]
     Send {
         /// Slack message URL, #name/name, or channel id
         target: String,
@@ -440,6 +477,16 @@ pub enum MessageCommand {
     },
 
     /// Fetch all messages from a channel, with optional thread expansion
+    #[command(after_long_help = "\
+Examples:
+  # List recent messages in #general
+  slackers message list #general --limit 20
+
+  # List with date filter
+  slackers message list #general --after 2026-08-01 --before 2026-08-10
+
+  # Include full thread replies for each message
+  slackers message list #general --limit 50 --include-threads")]
     List {
         /// Channel name (#name) or ID (C...)
         channel: String,
@@ -739,6 +786,16 @@ pub enum SearchCommand {
     },
 
     /// Search messages
+    #[command(after_long_help = "\
+Examples:
+  # Search for a phrase in all channels
+  slackers search messages \"deployment failed\"
+
+  # Search in a specific channel, sorted by relevance
+  slackers search messages \"bug report\" --channel #engineering --sort relevance
+
+  # Search recent messages from a user
+  slackers search messages \"review\" --user @alice --after 2026-08-01")]
     Messages {
         /// Search query
         query: String,
@@ -748,6 +805,13 @@ pub enum SearchCommand {
     },
 
     /// Search files
+    #[command(after_long_help = "\
+Examples:
+  # Search for files by name or content
+  slackers search files \"quarterly report\"
+
+  # Search images only, in a specific channel
+  slackers search files \"screenshot\" --content-type image --channel #design")]
     Files {
         /// Search query
         query: String,
@@ -888,6 +952,16 @@ pub enum UserCommand {
 #[derive(Subcommand, Debug)]
 pub enum ChannelCommand {
     /// List channels/conversations in the workspace
+    #[command(after_long_help = "\
+Examples:
+  # List channels you've joined
+  slackers channel list
+
+  # List all channels including ones you haven't joined
+  slackers channel list --all --limit 500
+
+  # List private channels as a table
+  slackers channel list --types private_channel --format table")]
     List {
         /// Workspace URL (required if you have multiple workspaces)
         #[arg(long)]
@@ -1197,6 +1271,13 @@ pub enum DmCommand {
     Open(DmOpenOptions),
 
     /// Open a DM and send a message
+    #[command(after_long_help = "\
+Examples:
+  # Send a DM to one user
+  slackers dm send --users U0123ABCD --message \"Hey, can you review my PR?\"
+
+  # Send a group DM to multiple users
+  slackers dm send --users U0123ABCD,U0456EFGH --message \"Meeting moved to 3pm\"")]
     Send(DmSendOptions),
 }
 
