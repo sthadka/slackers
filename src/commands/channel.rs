@@ -35,7 +35,7 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
         }
         ChannelCommand::Mark(opts) => handle_channel_mark(opts).await,
         ChannelCommand::Members(opts) => handle_channel_members(opts).await,
-        ChannelCommand::New(opts) => handle_channel_new(opts).await,
+        ChannelCommand::Create(opts) => handle_channel_new(opts).await,
         ChannelCommand::Invite(opts) => handle_channel_invite(opts).await,
         ChannelCommand::Rename { channel, name, workspace } => {
             handle_channel_rename(&channel, &name, workspace.as_deref()).await

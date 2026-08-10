@@ -885,7 +885,7 @@ pub enum ChannelCommand {
     Members(ChannelMembersOptions),
 
     /// Create a new channel
-    New(ChannelNewOptions),
+    Create(ChannelNewOptions),
 
     /// Invite users to a channel
     Invite(ChannelInviteOptions),

@@ -431,7 +431,7 @@ pub fn all_tools() -> Vec<ToolDef> {
             is_write: true,
         },
         ToolDef {
-            name: "channel_new",
+            name: "channel_create",
             description: "Create a new channel",
             input_schema: json!({
                 "type": "object",
@@ -1029,9 +1029,9 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             cli.push("--ts".into()); cli.push(str_req(args, "ts"));
             if let Some(v) = str_val(args, "workspace") { cli.push("--workspace".into()); cli.push(v); }
         }
-        "channel_new" => {
+        "channel_create" => {
             cli.push("channel".into());
-            cli.push("new".into());
+            cli.push("create".into());
             cli.push("--name".into()); cli.push(str_req(args, "name"));
             if bool_val(args, "private") { cli.push("--private".into()); }
             if let Some(v) = str_val(args, "workspace") { cli.push("--workspace".into()); cli.push(v); }
