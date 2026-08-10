@@ -42,7 +42,7 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
             MessageCommand::Get { .. }
             | MessageCommand::Thread { .. }
             | MessageCommand::List { .. }
-            | MessageCommand::ThreadParticipants { .. } => {
+            | MessageCommand::Participants { .. } => {
                 message::handle_message(subcommand).await
             }
             MessageCommand::Send { .. }

@@ -99,7 +99,7 @@ pub fn all_tools() -> Vec<ToolDef> {
             is_write: false,
         },
         ToolDef {
-            name: "message_thread_participants",
+            name: "message_participants",
             description: "List unique participants in a thread with message counts",
             input_schema: json!({
                 "type": "object",
@@ -876,9 +876,9 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             if bool_val(args, "include_reactions") { cli.push("--include-reactions".into()); }
             if let Some(v) = str_val(args, "output") { cli.push("--output".into()); cli.push(v); }
         }
-        "message_thread_participants" => {
+        "message_participants" => {
             cli.push("message".into());
-            cli.push("thread-participants".into());
+            cli.push("participants".into());
             if let Some(v) = str_val(args, "target") { cli.push(v); }
             if let Some(v) = str_val(args, "channel") { cli.push("--channel".into()); cli.push(v); }
             if let Some(v) = str_val(args, "ts") { cli.push("--ts".into()); cli.push(v); }

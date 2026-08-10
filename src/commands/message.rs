@@ -33,7 +33,7 @@ pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
         MessageCommand::List { channel, options } => {
             handle_message_history(&channel, options).await
         }
-        MessageCommand::ThreadParticipants {
+        MessageCommand::Participants {
             target,
             channel,
             ts,

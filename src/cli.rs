@@ -375,7 +375,7 @@ pub enum MessageCommand {
     },
 
     /// List unique participants in a thread with message counts
-    ThreadParticipants {
+    Participants {
         /// Slack thread URL, or omit and use --channel + --ts
         target: Option<String>,
 
