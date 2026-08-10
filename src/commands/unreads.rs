@@ -27,8 +27,8 @@ async fn handle_unreads_show(opts: crate::cli::UnreadsShowOptions) -> Result<()>
 
     let format = opts
         .format
-        .as_deref()
-        .map(|f| OutputFormat::from_str(f))
+        .as_ref()
+        .map(|f| OutputFormat::from_str(f.as_str()))
         .flatten()
         .unwrap_or_default();
 

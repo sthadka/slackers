@@ -19,7 +19,7 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
             resolve_users,
             all,
             format,
-        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users, all, &format).await,
+        } => handle_channel_list(workspace.as_deref(), types, exclude_archived, limit, resolve_users, all, format.as_str()).await,
         ChannelCommand::Get {
             channel,
             workspace,

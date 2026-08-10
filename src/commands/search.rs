@@ -49,19 +49,17 @@ async fn handle_search_impl(
     let auth_result = resolve_auth(options.workspace.as_deref())?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
-    // Parse content type
-    let content_type = match options.content_type.as_deref() {
-        Some("text") => ContentType::Text,
-        Some("image") => ContentType::Image,
-        Some("snippet") => ContentType::Snippet,
-        Some("file") => ContentType::File,
-        _ => ContentType::Any,
+    let content_type = match options.content_type {
+        Some(crate::cli::ContentTypeArg::Text) => ContentType::Text,
+        Some(crate::cli::ContentTypeArg::Image) => ContentType::Image,
+        Some(crate::cli::ContentTypeArg::Snippet) => ContentType::Snippet,
+        Some(crate::cli::ContentTypeArg::File) => ContentType::File,
+        Some(crate::cli::ContentTypeArg::Any) | None => ContentType::Any,
     };
 
-    // Parse sort order
-    let sort = match options.sort.as_deref() {
-        Some("relevance") | Some("score") => SortOrder::Relevance,
-        _ => SortOrder::Timestamp,
+    let sort = match options.sort {
+        Some(crate::cli::SortArg::Relevance) => SortOrder::Relevance,
+        Some(crate::cli::SortArg::Timestamp) | None => SortOrder::Timestamp,
     };
 
     // Parse advanced filters
@@ -129,7 +127,7 @@ async fn handle_search_impl(
     let messages_value = json!(msgs);
 
     // Determine output format
-    let fmt = OutputFormat::from_str(&options.format).unwrap_or_default();
+    let fmt = OutputFormat::from_str(options.format.as_str()).unwrap_or_default();
 
     // Build output
     let mut output = json!({

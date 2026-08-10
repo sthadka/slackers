@@ -14,7 +14,7 @@ pub async fn handle_user(subcommand: UserCommand) -> Result<()> {
             cursor: _,
             include_bots,
             format,
-        } => handle_user_list(workspace.as_deref(), limit, include_bots, &format).await,
+        } => handle_user_list(workspace.as_deref(), limit, include_bots, format.as_str()).await,
         UserCommand::Get { user, workspace } => {
             handle_user_get(&user, workspace.as_deref()).await
         }

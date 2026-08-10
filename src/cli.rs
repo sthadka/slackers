@@ -1,4 +1,59 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum FormatArg {
+    #[default]
+    Json,
+    Table,
+    Markdown,
+    Plain,
+}
+
+impl FormatArg {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Json => "json",
+            Self::Table => "table",
+            Self::Markdown => "markdown",
+            Self::Plain => "plain",
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum ExportFormatArg {
+    #[default]
+    Json,
+    Csv,
+    Html,
+}
+
+impl ExportFormatArg {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Json => "json",
+            Self::Csv => "csv",
+            Self::Html => "html",
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum SortArg {
+    #[default]
+    Timestamp,
+    Relevance,
+}
+
+#[derive(ValueEnum, Clone, Debug, Default)]
+pub enum ContentTypeArg {
+    #[default]
+    Any,
+    Text,
+    Image,
+    Snippet,
+    File,
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "slackers")]
@@ -547,9 +602,9 @@ pub struct MessageListOptions {
     #[arg(long)]
     pub workspace: Option<String>,
 
-    /// Output format: json (default), table, markdown, plain
-    #[arg(long, default_value = "json")]
-    pub format: String,
+    /// Output format
+    #[arg(long, value_enum, default_value_t = FormatArg::Json)]
+    pub format: FormatArg,
 
     /// Thread root ts (required when using #channel/channel id unless you pass --ts)
     #[arg(long)]
@@ -689,9 +744,9 @@ pub struct SearchOptions {
     #[arg(long)]
     pub workspace: Option<String>,
 
-    /// Output format: json (default), table, markdown, plain
-    #[arg(long, default_value = "json")]
-    pub format: String,
+    /// Output format
+    #[arg(long, value_enum, default_value_t = FormatArg::Json)]
+    pub format: FormatArg,
 
     /// Channel filter (#name, name, or id). Repeatable.
     #[arg(long)]
@@ -709,9 +764,9 @@ pub struct SearchOptions {
     #[arg(long)]
     pub before: Option<String>,
 
-    /// Filter content type: any|text|image|snippet|file (default any)
-    #[arg(long)]
-    pub content_type: Option<String>,
+    /// Filter content type
+    #[arg(long, value_enum)]
+    pub content_type: Option<ContentTypeArg>,
 
     /// Max results (default 20)
     #[arg(long, default_value = "20")]
@@ -721,9 +776,9 @@ pub struct SearchOptions {
     #[arg(long, default_value = "4000")]
     pub max_body_chars: i32,
 
-    /// Sort order: timestamp (default) or relevance
-    #[arg(long)]
-    pub sort: Option<String>,
+    /// Sort order
+    #[arg(long, value_enum)]
+    pub sort: Option<SortArg>,
 
     /// Only results containing a URL (has:link)
     #[arg(long, default_value = "false")]
@@ -791,9 +846,9 @@ pub enum UserCommand {
         #[arg(long)]
         include_bots: bool,
 
-        /// Output format: json (default), table, markdown, plain
-        #[arg(long, default_value = "json")]
-        format: String,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = FormatArg::Json)]
+        format: FormatArg,
     },
 
     /// Get a single user by id (U...) or handle (@name)
@@ -839,9 +894,9 @@ pub enum ChannelCommand {
         #[arg(long)]
         all: bool,
 
-        /// Output format: json (default), table, markdown, plain
-        #[arg(long, default_value = "json")]
-        format: String,
+        /// Output format
+        #[arg(long, value_enum, default_value_t = FormatArg::Json)]
+        format: FormatArg,
     },
 
     /// Get detailed information about a channel
@@ -1209,9 +1264,9 @@ pub struct ExportChannelOptions {
     #[arg(long)]
     pub channel: String,
 
-    /// Output format: json, csv, or html (default json)
-    #[arg(long, default_value = "json")]
-    pub format: String,
+    /// Output format
+    #[arg(long, value_enum, default_value_t = ExportFormatArg::Json)]
+    pub format: ExportFormatArg,
 
     /// Output file path (defaults to stdout)
     #[arg(long)]
@@ -1250,9 +1305,9 @@ pub struct UnreadsShowOptions {
     #[arg(long)]
     pub include_system: bool,
 
-    /// Output format: json, table, markdown, plain
-    #[arg(long)]
-    pub format: Option<String>,
+    /// Output format
+    #[arg(long, value_enum)]
+    pub format: Option<FormatArg>,
 
     /// Workspace URL (required if you have multiple workspaces)
     #[arg(long)]

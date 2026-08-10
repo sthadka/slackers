@@ -302,7 +302,7 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
     }
 
     // Determine output format
-    let fmt = OutputFormat::from_str(&options.format).unwrap_or_default();
+    let fmt = OutputFormat::from_str(options.format.as_str()).unwrap_or_default();
 
     // Build output
     let mut output = json!({

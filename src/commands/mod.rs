@@ -158,7 +158,7 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
             ExportCommand::Channel(opts) => {
                 export::run_export(
                     &opts.channel,
-                    &opts.format,
+                    opts.format.as_str(),
                     opts.output.as_deref(),
                     opts.workspace.as_deref(),
                 )
