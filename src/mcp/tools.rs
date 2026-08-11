@@ -445,6 +445,18 @@ pub fn all_tools() -> Vec<ToolDef> {
             is_write: true,
         },
         ToolDef {
+            name: "channel_cache",
+            description: "Build or clear the channel name cache (speeds up #name resolution)",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "clear": bool_prop("Clear the cache instead of refreshing"),
+                    "workspace": prop("Workspace URL")
+                }
+            }),
+            is_write: false,
+        },
+        ToolDef {
             name: "channel_invite",
             description: "Invite users to a channel",
             input_schema: json!({

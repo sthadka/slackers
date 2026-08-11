@@ -1,3 +1,4 @@
+use crate::app_config::{channel_cache_path, load_channel_cache, save_channel_cache};
 use crate::auth::resolve_auth;
 use crate::cli::{ChannelCommand, ChannelInviteOptions, ChannelMarkOptions, ChannelMembersOptions, ChannelNewOptions};
 use crate::error::Result;
@@ -37,6 +38,9 @@ pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
         ChannelCommand::Members(opts) => handle_channel_members(opts).await,
         ChannelCommand::Create(opts) => handle_channel_new(opts).await,
         ChannelCommand::Invite(opts) => handle_channel_invite(opts).await,
+        ChannelCommand::Cache { clear, workspace } => {
+            handle_channel_cache(clear, workspace.as_deref()).await
+        }
         ChannelCommand::Rename { channel, name, workspace } => {
             handle_channel_rename(&channel, &name, workspace.as_deref()).await
         }
@@ -305,6 +309,48 @@ async fn handle_channel_invite(opts: ChannelInviteOptions) -> Result<()> {
         })
     };
     println!("{}", to_json_output(&output));
+
+    Ok(())
+}
+
+async fn handle_channel_cache(clear: bool, workspace: Option<&str>) -> Result<()> {
+    if clear {
+        if let Ok(path) = channel_cache_path() {
+            let _ = std::fs::remove_file(&path);
+        }
+        println!("{}", to_json_output(&json!({ "ok": true, "action": "cleared" })));
+        return Ok(());
+    }
+
+    let auth_result = resolve_auth(workspace)?;
+    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    let channels = list_conversations(
+        &client,
+        Some(vec!["public_channel".to_string(), "private_channel".to_string()]),
+        true,
+        None,
+        false,
+        None,
+    )
+    .await?;
+
+    let mut cache = load_channel_cache();
+    for ch in &channels {
+        if let Some(name) = &ch.name {
+            cache.insert(name.clone(), ch.id.clone());
+        }
+    }
+    save_channel_cache(&cache);
+
+    println!(
+        "{}",
+        to_json_output(&json!({
+            "ok": true,
+            "action": "refreshed",
+            "channels_cached": cache.len(),
+        }))
+    );
 
     Ok(())
 }

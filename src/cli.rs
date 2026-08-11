@@ -1038,6 +1038,17 @@ Examples:
     /// Invite users to a channel
     Invite(ChannelInviteOptions),
 
+    /// Build or clear the channel name → ID cache
+    Cache {
+        /// Clear the cache instead of refreshing it
+        #[arg(long)]
+        clear: bool,
+
+        /// Workspace URL (required if you have multiple workspaces)
+        #[arg(long)]
+        workspace: Option<String>,
+    },
+
     /// Rename a channel
     Rename {
         /// Channel id (C...) or #name/name

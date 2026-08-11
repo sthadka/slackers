@@ -75,7 +75,8 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
         Command::Channel { subcommand } => match subcommand {
             ChannelCommand::List { .. }
             | ChannelCommand::Get { .. }
-            | ChannelCommand::Members(..) => {
+            | ChannelCommand::Members(..)
+            | ChannelCommand::Cache { .. } => {
                 channel::handle_channel(subcommand).await
             }
             ChannelCommand::Create(..)
