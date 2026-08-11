@@ -57,8 +57,48 @@ pub enum ContentTypeArg {
 
 #[derive(Parser, Debug)]
 #[command(name = "slackers")]
-#[command(about = "Rust clone of agent-slack - Slack automation CLI for AI agents")]
-#[command(version)]
+#[command(
+    about = "Slack CLI for humans and AI agents",
+    version,
+    disable_help_subcommand = true,
+    help_template = "\
+{about}
+
+{usage-heading} {usage}
+
+CORE COMMANDS
+  message     Read, send, and manage messages and threads
+  channel     Discover and manage channels
+  search      Search messages and files
+  dm          Send direct messages
+  unreads     Show unread messages
+
+CONTENT
+  file        Upload, delete, and list files
+  canvas      Read Slack canvases
+  export      Export channel history
+
+WORKSPACE
+  user        Look up users
+  emoji       List custom emoji
+  workspace   Workspace info (name, domain, icon)
+
+AUTOMATION
+  scheduled   Schedule and manage delayed messages
+  workflow    Discover and run Slack workflows
+  batch       Send messages or react in bulk
+  slash       Execute slash commands
+
+OTHER
+  later       Manage saved items (Later list)
+  mention     List @mentions
+  auth        Manage authentication
+  serve       Start MCP server over stdio
+
+GLOBAL FLAGS
+{options}
+Use 'slackers <command> --help' for more information about a command."
+)]
 pub struct Cli {
     /// Block all write operations (send, update, delete, pin, react, etc.)
     #[arg(long, global = true)]
@@ -84,7 +124,6 @@ pub struct Cli {
 pub enum Command {
     // ── CORE COMMANDS ────────────────────────────────────────────────────────
     /// Read, send, and manage messages and threads
-    #[command(next_help_heading = "Core Commands")]
     Message {
         #[command(subcommand)]
         subcommand: MessageCommand,
@@ -113,7 +152,6 @@ pub enum Command {
 
     // ── CONTENT ──────────────────────────────────────────────────────────────
     /// Upload, delete, and list files
-    #[command(next_help_heading = "Content")]
     File {
         #[command(subcommand)]
         subcommand: FileCommand,
@@ -131,7 +169,6 @@ pub enum Command {
 
     // ── WORKSPACE ────────────────────────────────────────────────────────────
     /// Look up users
-    #[command(next_help_heading = "Workspace")]
     User {
         #[command(subcommand)]
         subcommand: UserCommand,
@@ -151,7 +188,6 @@ pub enum Command {
 
     // ── AUTOMATION ───────────────────────────────────────────────────────────
     /// Schedule and manage delayed messages
-    #[command(next_help_heading = "Automation")]
     Scheduled {
         #[command(subcommand)]
         subcommand: ScheduledCommand,
@@ -175,7 +211,6 @@ pub enum Command {
 
     // ── OTHER ────────────────────────────────────────────────────────────────
     /// Manage saved items (Later list)
-    #[command(next_help_heading = "Other")]
     Later {
         #[command(subcommand)]
         subcommand: LaterCommand,
