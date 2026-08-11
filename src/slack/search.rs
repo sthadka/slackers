@@ -221,6 +221,7 @@ pub async fn search_slack(
     if options.kind == SearchKind::Files || options.kind == SearchKind::All {
         let files_input = SearchFilesInput {
             auth,
+            workspace_url: options.workspace_url,
             query: &slack_query,
             limit,
             content_type: content_type.clone(),

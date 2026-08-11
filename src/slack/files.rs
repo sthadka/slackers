@@ -15,6 +15,7 @@ pub async fn download_file(
     _client: &SlackClient,
     file_info: &Value,
     auth: &WorkspaceAuth,
+    workspace_url: Option<&str>,
 ) -> Result<PathBuf> {
     // Extract file information
     let file_id = file_info
@@ -74,9 +75,11 @@ pub async fn download_file(
                 HeaderValue::from_str(&format!("d={}", urlencoding::encode(xoxd_cookie)))
                     .map_err(|e| SlackersError::Other(e.to_string()))?,
             );
+            let referer = workspace_url.unwrap_or("https://app.slack.com");
             headers.insert(
                 REFERER,
-                HeaderValue::from_static("https://app.slack.com"),
+                HeaderValue::from_str(referer)
+                    .map_err(|e| SlackersError::Other(e.to_string()))?,
             );
         }
     }

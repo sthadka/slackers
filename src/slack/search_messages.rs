@@ -104,7 +104,7 @@ pub async fn search_messages(
                     if let Some(file_id) = file.get("id").and_then(|id| id.as_str()) {
                         if !downloaded_paths.contains_key(file_id) {
                             if let Ok(path) =
-                                download_file(client, file, input.auth).await
+                                download_file(client, file, input.auth, input.workspace_url).await
                             {
                                 downloaded_paths.insert(file_id.to_string(), path);
                             }

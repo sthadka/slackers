@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 pub struct SearchFilesInput<'a> {
     pub auth: &'a WorkspaceAuth,
+    pub workspace_url: Option<&'a str>,
     pub query: &'a str,
     pub limit: usize,
     pub content_type: ContentType,
@@ -54,7 +55,7 @@ pub async fn search_files(
         }
 
         // Try to download the file
-        if let Ok(path) = download_file(client, file_match, input.auth).await {
+        if let Ok(path) = download_file(client, file_match, input.auth, input.workspace_url).await {
             let title = file_match
                 .get("title")
                 .and_then(|v| v.as_str())
