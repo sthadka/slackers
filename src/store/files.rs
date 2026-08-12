@@ -65,6 +65,15 @@ impl Store {
         Ok(())
     }
 
+    /// Delete a file record by its ID.
+    pub fn delete_file(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| {
+            crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+        })?;
+        conn.execute("DELETE FROM files WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
     /// Retrieve a file by its ID.
     pub fn get_file(&self, id: &str) -> Result<Option<StoredFile>> {
         let conn = self.conn.lock().map_err(|e| {
@@ -277,5 +286,25 @@ mod tests {
         assert!(file.name.is_none());
         assert!(file.mimetype.is_none());
         assert!(file.size_bytes.is_none());
+    }
+
+    #[test]
+    fn test_delete_file() {
+        let store = Store::open_in_memory().unwrap();
+
+        store
+            .upsert_file("F001", None, None, Some("test.txt"), None, None, None, None, None)
+            .unwrap();
+        assert!(store.get_file("F001").unwrap().is_some());
+
+        store.delete_file("F001").unwrap();
+        assert!(store.get_file("F001").unwrap().is_none());
+    }
+
+    #[test]
+    fn test_delete_file_nonexistent() {
+        let store = Store::open_in_memory().unwrap();
+        // Deleting a non-existent file should succeed (no-op).
+        store.delete_file("F999").unwrap();
     }
 }

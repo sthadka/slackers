@@ -396,45 +396,29 @@ fn update_channel_archived(store: &Store, channel_id: &str, archived: bool) -> R
     }
 }
 
-/// Insert a row into `channel_members`. Uses raw SQL because there is no
-/// dedicated `Store` method for this yet.
+/// Insert a row into `channel_members`.
 fn insert_channel_member(store: &Store, channel_id: &str, user_id: &str) -> Result<()> {
-    // We access the store's internal connection via a method that doesn't
-    // exist on Store yet. Since Store wraps Mutex<Connection> and we can't
-    // access `conn` from outside the module, we use a best-effort approach.
-    // The store module exposes write helpers; for channel_members we fall
-    // through to Ok(()) and leave it for a future Store method.
-    let _ = (channel_id, user_id);
-    // TODO: add `store.insert_channel_member(channel_id, user_id)` method
-    Ok(())
+    store.insert_channel_member(channel_id, user_id)
 }
 
 /// Remove a row from `channel_members`.
 fn remove_channel_member(store: &Store, channel_id: &str, user_id: &str) -> Result<()> {
-    let _ = (channel_id, user_id);
-    // TODO: add `store.remove_channel_member(channel_id, user_id)` method
-    Ok(())
+    store.remove_channel_member(channel_id, user_id)
 }
 
 /// Insert a pin record.
 fn upsert_pin(store: &Store, channel_id: &str, message_ts: &str, user: Option<&str>) -> Result<()> {
-    let _ = (store, channel_id, message_ts, user);
-    // TODO: add `store.upsert_pin(channel_id, message_ts, user)` method
-    Ok(())
+    store.upsert_pin(channel_id, message_ts, user, None)
 }
 
 /// Delete a pin record.
 fn delete_pin(store: &Store, channel_id: &str, message_ts: &str) -> Result<()> {
-    let _ = (store, channel_id, message_ts);
-    // TODO: add `store.delete_pin(channel_id, message_ts)` method
-    Ok(())
+    store.delete_pin(channel_id, message_ts)
 }
 
 /// Delete a file record by ID.
 fn delete_file(store: &Store, file_id: &str) -> Result<()> {
-    let _ = (store, file_id);
-    // TODO: add `store.delete_file(file_id)` method
-    Ok(())
+    store.delete_file(file_id)
 }
 
 // ─── reconnect loop ─────────────────────────────────────────────────────────

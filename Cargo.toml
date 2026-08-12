@@ -31,6 +31,7 @@ cbc = "0.1"
 sha1 = "0.10"
 toml = "0.8"
 indicatif = "0.17"
+libc = "0.2"
 comfy-table = "7"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 futures-util = "0.3"

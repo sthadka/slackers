@@ -102,6 +102,61 @@ impl Store {
         Ok(result)
     }
 
+    /// Insert a user into channel_members. Ignores duplicates.
+    pub fn insert_channel_member(&self, channel_id: &str, user_id: &str) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| {
+            crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+        })?;
+        conn.execute(
+            "INSERT OR IGNORE INTO channel_members (channel_id, user_id) VALUES (?1, ?2)",
+            params![channel_id, user_id],
+        )?;
+        Ok(())
+    }
+
+    /// Remove a user from channel_members.
+    pub fn remove_channel_member(&self, channel_id: &str, user_id: &str) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| {
+            crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+        })?;
+        conn.execute(
+            "DELETE FROM channel_members WHERE channel_id = ?1 AND user_id = ?2",
+            params![channel_id, user_id],
+        )?;
+        Ok(())
+    }
+
+    /// Insert or replace a pin record.
+    pub fn upsert_pin(
+        &self,
+        channel_id: &str,
+        message_ts: &str,
+        pinned_by: Option<&str>,
+        pinned_at: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| {
+            crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+        })?;
+        conn.execute(
+            "INSERT OR REPLACE INTO pins (channel_id, message_ts, pinned_by, pinned_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![channel_id, message_ts, pinned_by, pinned_at],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a pin record.
+    pub fn delete_pin(&self, channel_id: &str, message_ts: &str) -> Result<()> {
+        let conn = self.conn.lock().map_err(|e| {
+            crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+        })?;
+        conn.execute(
+            "DELETE FROM pins WHERE channel_id = ?1 AND message_ts = ?2",
+            params![channel_id, message_ts],
+        )?;
+        Ok(())
+    }
+
     /// List all channels, ordered by name.
     pub fn list_channels(&self) -> Result<Vec<CompactChannel>> {
         let conn = self.conn.lock().map_err(|e| {
@@ -266,6 +321,114 @@ mod tests {
         assert_eq!(got.purpose, Some("Coordinate on project X".to_string()));
         assert_eq!(got.num_members, Some(42));
         assert_eq!(got.created, Some(1609459200));
+    }
+
+    #[test]
+    fn test_insert_channel_member() {
+        let store = Store::open_in_memory().unwrap();
+        store.upsert_channel(&make_channel("C001", Some("general"))).unwrap();
+
+        store.insert_channel_member("C001", "U001").unwrap();
+        store.insert_channel_member("C001", "U002").unwrap();
+
+        // Inserting duplicate should succeed (INSERT OR IGNORE).
+        store.insert_channel_member("C001", "U001").unwrap();
+
+        // Verify via raw SQL.
+        let conn = store.conn.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM channel_members WHERE channel_id = ?1",
+                params!["C001"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_remove_channel_member() {
+        let store = Store::open_in_memory().unwrap();
+        store.upsert_channel(&make_channel("C001", Some("general"))).unwrap();
+
+        store.insert_channel_member("C001", "U001").unwrap();
+        store.insert_channel_member("C001", "U002").unwrap();
+
+        store.remove_channel_member("C001", "U001").unwrap();
+
+        let conn = store.conn.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM channel_members WHERE channel_id = ?1",
+                params!["C001"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_remove_channel_member_nonexistent() {
+        let store = Store::open_in_memory().unwrap();
+        // Removing a non-existent member should succeed (no-op).
+        store.remove_channel_member("C999", "U999").unwrap();
+    }
+
+    #[test]
+    fn test_upsert_and_delete_pin() {
+        let store = Store::open_in_memory().unwrap();
+
+        store.upsert_pin("C001", "1700000000.000001", Some("U001"), Some(1700000000)).unwrap();
+
+        // Verify pin exists.
+        let conn = store.conn.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pins WHERE channel_id = ?1 AND message_ts = ?2",
+                params!["C001", "1700000000.000001"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+        drop(conn);
+
+        // Delete pin.
+        store.delete_pin("C001", "1700000000.000001").unwrap();
+
+        let conn = store.conn.lock().unwrap();
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pins WHERE channel_id = ?1 AND message_ts = ?2",
+                params!["C001", "1700000000.000001"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_upsert_pin_replaces() {
+        let store = Store::open_in_memory().unwrap();
+
+        store.upsert_pin("C001", "1700000000.000001", Some("U001"), Some(100)).unwrap();
+        store.upsert_pin("C001", "1700000000.000001", Some("U002"), Some(200)).unwrap();
+
+        let conn = store.conn.lock().unwrap();
+        let pinned_by: String = conn
+            .query_row(
+                "SELECT pinned_by FROM pins WHERE channel_id = ?1 AND message_ts = ?2",
+                params!["C001", "1700000000.000001"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pinned_by, "U002");
+    }
+
+    #[test]
+    fn test_delete_pin_nonexistent() {
+        let store = Store::open_in_memory().unwrap();
+        // Deleting a non-existent pin should succeed (no-op).
+        store.delete_pin("C999", "0.0").unwrap();
     }
 
     #[test]
