@@ -92,6 +92,8 @@ AUTOMATION
 STORE & SYNC
   store       Manage the local SQLite store
   sync        Sync subscribed channels to local store
+  query       Ad-hoc queries against the local store
+  report      Generate reports from the local store
 
 OTHER
   later       Manage saved items (Later list)
@@ -225,6 +227,18 @@ pub enum Command {
     Sync {
         #[command(subcommand)]
         subcommand: SyncCommand,
+    },
+    /// Ad-hoc queries against the local store
+    #[command(about = "Ad-hoc queries against the local store")]
+    Query {
+        #[command(subcommand)]
+        subcommand: QueryCommand,
+    },
+    /// Generate reports from the local store
+    #[command(about = "Generate reports from the local store")]
+    Report {
+        #[command(subcommand)]
+        subcommand: ReportCommand,
     },
 
     // ── OTHER ────────────────────────────────────────────────────────────────
@@ -1649,4 +1663,226 @@ pub struct SyncBackfillOptions {
     /// Backfill only this channel (name or ID). If omitted, backfills all subscribed channels.
     #[arg(long)]
     pub channel: Option<String>,
+}
+
+// ============================================================================
+// Query Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum QueryCommand {
+    /// Query messages with flexible filters
+    Messages(QueryMessagesOpts),
+
+    /// Query threads with participant and reply counts
+    Threads(QueryThreadsOpts),
+
+    /// Query reaction statistics
+    Reactions(QueryReactionsOpts),
+
+    /// Query file attachments
+    Files(QueryFilesOpts),
+
+    /// Query message activity over time
+    Activity(QueryActivityOpts),
+}
+
+#[derive(Args, Debug)]
+pub struct QueryMessagesOpts {
+    /// Filter by user ID (U...) or @handle
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Filter by channel ID (C...) or #name
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Only messages after this time (relative like "7d" or timestamp)
+    #[arg(long)]
+    pub after: Option<String>,
+
+    /// Only messages before this time (relative like "7d" or timestamp)
+    #[arg(long)]
+    pub before: Option<String>,
+
+    /// Filter by text content (substring match)
+    #[arg(long)]
+    pub text: Option<String>,
+
+    /// Sort order (timestamp, replies)
+    #[arg(long)]
+    pub sort: Option<String>,
+
+    /// Max results (default 50)
+    #[arg(long, default_value = "50")]
+    pub limit: u32,
+}
+
+#[derive(Args, Debug)]
+pub struct QueryThreadsOpts {
+    /// Filter by user ID
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Only threads after this time
+    #[arg(long)]
+    pub after: Option<String>,
+
+    /// Only threads before this time
+    #[arg(long)]
+    pub before: Option<String>,
+
+    /// Sort order (replies, participants, duration)
+    #[arg(long)]
+    pub sort: Option<String>,
+
+    /// Max results (default 50)
+    #[arg(long, default_value = "50")]
+    pub limit: u32,
+}
+
+#[derive(Args, Debug)]
+pub struct QueryReactionsOpts {
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Filter by user ID
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Filter by emoji name
+    #[arg(long)]
+    pub emoji: Option<String>,
+
+    /// Group by field (emoji, user)
+    #[arg(long)]
+    pub group_by: Option<String>,
+
+    /// Max results (default 50)
+    #[arg(long, default_value = "50")]
+    pub limit: u32,
+}
+
+#[derive(Args, Debug)]
+pub struct QueryFilesOpts {
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Filter by type or name (substring match)
+    #[arg(long)]
+    pub text: Option<String>,
+
+    /// Sort order (size, name)
+    #[arg(long)]
+    pub sort: Option<String>,
+
+    /// Max results (default 50)
+    #[arg(long, default_value = "50")]
+    pub limit: u32,
+}
+
+#[derive(Args, Debug)]
+pub struct QueryActivityOpts {
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Filter by user ID
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Only activity after this time
+    #[arg(long)]
+    pub after: Option<String>,
+
+    /// Only activity before this time
+    #[arg(long)]
+    pub before: Option<String>,
+
+    /// Max results (default 50)
+    #[arg(long, default_value = "50")]
+    pub limit: u32,
+}
+
+// ============================================================================
+// Report Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum ReportCommand {
+    /// Channel activity report (messages/day, unique posters, peak hours, thread ratio)
+    Activity(ReportActivityOpts),
+
+    /// User activity report (message count, channels active, thread response time)
+    User(ReportUserOpts),
+
+    /// Thread analytics (longest, most-replied, unanswered)
+    Threads(ReportThreadsOpts),
+
+    /// Reaction analytics (most-used emoji, most-reacted messages)
+    Reactions(ReportReactionsOpts),
+
+    /// Mention analytics (who mentions whom, by channel)
+    Mentions(ReportMentionsOpts),
+}
+
+#[derive(Args, Debug)]
+pub struct ReportActivityOpts {
+    /// Filter by channel ID (C...) or #name
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Time period (e.g. "30d", "7d")
+    #[arg(long)]
+    pub period: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ReportUserOpts {
+    /// User ID (U...) or @handle
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Time period (e.g. "30d", "7d")
+    #[arg(long)]
+    pub period: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ReportThreadsOpts {
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Time period (e.g. "30d")
+    #[arg(long)]
+    pub period: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ReportReactionsOpts {
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct ReportMentionsOpts {
+    /// User to search for mentions of (required)
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Filter by channel ID
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Time period (e.g. "30d")
+    #[arg(long)]
+    pub period: Option<String>,
 }

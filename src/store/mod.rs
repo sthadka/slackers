@@ -2,6 +2,7 @@ pub mod channels;
 pub mod files;
 pub mod fts;
 pub mod messages;
+pub mod query;
 pub mod reactions;
 mod schema;
 pub mod subscriptions;

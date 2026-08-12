@@ -8,7 +8,9 @@ pub mod file;
 mod message;
 pub mod mention;
 pub mod later;
+mod query;
 pub mod scheduled;
+mod report;
 mod search;
 mod slash;
 mod store;
@@ -232,6 +234,12 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
         }
         Command::Sync { subcommand } => {
             sync_cmd::handle_sync(subcommand, read_only).await
+        }
+        Command::Query { subcommand } => {
+            query::handle_query(subcommand).await
+        }
+        Command::Report { subcommand } => {
+            report::handle_report(subcommand).await
         }
         Command::Serve => {
             crate::mcp::run_server(read_only).await
