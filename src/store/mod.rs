@@ -1,3 +1,6 @@
+pub mod files;
+pub mod messages;
+pub mod reactions;
 mod schema;
 pub mod subscriptions;
 
