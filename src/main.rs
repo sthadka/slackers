@@ -9,6 +9,7 @@ mod output;
 mod render;
 mod slack;
 mod store;
+mod sync;
 mod target;
 mod util;
 
