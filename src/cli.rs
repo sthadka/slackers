@@ -89,6 +89,10 @@ AUTOMATION
   batch       Send messages or react in bulk
   slash       Execute slash commands
 
+STORE & SYNC
+  store       Manage the local SQLite store
+  sync        Sync subscribed channels to local store
+
 OTHER
   later       Manage saved items (Later list)
   mention     List @mentions
@@ -207,6 +211,20 @@ pub enum Command {
     Slash {
         #[command(subcommand)]
         subcommand: Option<SlashCommand>,
+    },
+
+    // ── STORE & SYNC ────────────────────────────────────────────────────────
+    /// Manage the local SQLite store
+    #[command(about = "Manage the local SQLite store")]
+    Store {
+        #[command(subcommand)]
+        subcommand: StoreCommand,
+    },
+    /// Sync subscribed channels to local store
+    #[command(about = "Sync subscribed channels to local store")]
+    Sync {
+        #[command(subcommand)]
+        subcommand: SyncCommand,
     },
 
     // ── OTHER ────────────────────────────────────────────────────────────────
@@ -1509,4 +1527,126 @@ pub enum WorkflowCommand {
         #[arg(long)]
         workspace: Option<String>,
     },
+}
+
+// ============================================================================
+// Store Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum StoreCommand {
+    /// Show store database info (sizes, counts, sync state)
+    #[command(about = "Show store info")]
+    Info,
+
+    /// Run garbage collection (delete expired messages, orphaned data, vacuum)
+    #[command(about = "Run garbage collection")]
+    Gc,
+
+    /// Reset the store (drop and recreate all tables)
+    #[command(about = "Reset the store")]
+    Reset,
+
+    /// Manage channel subscriptions
+    #[command(about = "Manage subscriptions")]
+    Sub {
+        #[command(subcommand)]
+        subcommand: StoreSubCommand,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum StoreSubCommand {
+    /// Subscribe to a channel for syncing
+    #[command(about = "Subscribe to a channel")]
+    Add(StoreSubAddOptions),
+
+    /// Unsubscribe from a channel
+    #[command(about = "Unsubscribe from a channel")]
+    Remove(StoreSubRemoveOptions),
+
+    /// List current subscriptions
+    #[command(about = "List subscriptions")]
+    List,
+}
+
+#[derive(Args, Debug)]
+pub struct StoreSubAddOptions {
+    /// Channel name (#name) or ID (C...)
+    pub channel: String,
+
+    /// Retention period (e.g. "90d", "30d"). Messages older than this are deleted during gc.
+    #[arg(long)]
+    pub retention: Option<String>,
+
+    /// Do not sync thread replies
+    #[arg(long)]
+    pub no_threads: bool,
+
+    /// Also sync file attachments
+    #[arg(long)]
+    pub with_files: bool,
+
+    /// Also sync channel membership
+    #[arg(long)]
+    pub with_members: bool,
+
+    /// Subscribe to a DM by user ID or @handle
+    #[arg(long)]
+    pub dm: Option<String>,
+
+    /// Subscribe to channels matching a glob pattern (e.g. "eng-*")
+    #[arg(long)]
+    pub pattern: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct StoreSubRemoveOptions {
+    /// Channel name (#name) or ID (C...)
+    pub channel: String,
+}
+
+// ============================================================================
+// Sync Commands
+// ============================================================================
+
+#[derive(Subcommand, Debug)]
+pub enum SyncCommand {
+    /// Start real-time sync (WebSocket or polling)
+    #[command(about = "Start real-time sync")]
+    Start(SyncStartOptions),
+
+    /// Stop the sync daemon
+    #[command(about = "Stop sync daemon")]
+    Stop,
+
+    /// Show sync status for subscribed channels
+    #[command(about = "Show sync status")]
+    Status,
+
+    /// Backfill historical messages for subscribed channels
+    #[command(about = "Backfill subscribed channels")]
+    Backfill(SyncBackfillOptions),
+
+    /// Run one-shot incremental sync (fetch new messages then exit)
+    #[command(about = "One-shot incremental sync")]
+    Once,
+}
+
+#[derive(Args, Debug)]
+pub struct SyncStartOptions {
+    /// Run as a background daemon
+    #[arg(long)]
+    pub daemon: bool,
+
+    /// Polling interval in seconds (for polling mode)
+    #[arg(long)]
+    pub interval: Option<u64>,
+}
+
+#[derive(Args, Debug)]
+pub struct SyncBackfillOptions {
+    /// Backfill only this channel (name or ID). If omitted, backfills all subscribed channels.
+    #[arg(long)]
+    pub channel: Option<String>,
 }

@@ -11,6 +11,8 @@ pub mod later;
 pub mod scheduled;
 mod search;
 mod slash;
+mod store;
+mod sync_cmd;
 mod unreads;
 mod user;
 mod workflow;
@@ -224,6 +226,12 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
                     slash::handle_slash(sub).await
                 }
             }
+        }
+        Command::Store { subcommand } => {
+            store::handle_store(subcommand).await
+        }
+        Command::Sync { subcommand } => {
+            sync_cmd::handle_sync(subcommand, read_only).await
         }
         Command::Serve => {
             crate::mcp::run_server(read_only).await
