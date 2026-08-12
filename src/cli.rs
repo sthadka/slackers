@@ -94,6 +94,7 @@ STORE & SYNC
   sync        Sync subscribed channels to local store
   query       Ad-hoc queries against the local store
   report      Generate reports from the local store
+  watch       Watch channels for new messages (local store)
 
 OTHER
   later       Manage saved items (Later list)
@@ -222,6 +223,9 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: StoreCommand,
     },
+    /// Watch channels for new messages in real time (from local store)
+    #[command(about = "Watch channels for new messages")]
+    Watch(WatchCommand),
     /// Sync subscribed channels to local store
     #[command(about = "Sync subscribed channels to local store")]
     Sync {
@@ -949,6 +953,18 @@ pub struct SearchOptions {
     /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
     #[arg(long)]
     pub refresh_users: bool,
+
+    /// Highlight matched terms in FTS5 local search results
+    #[arg(long)]
+    pub highlight: bool,
+
+    /// Search all subscribed channels (ignore --channel filter)
+    #[arg(long)]
+    pub all_channels: bool,
+
+    /// Post-filter results with a regex pattern on the text field
+    #[arg(long)]
+    pub regex: Option<String>,
 }
 
 // ============================================================================
@@ -1567,6 +1583,14 @@ pub enum StoreCommand {
         #[command(subcommand)]
         subcommand: StoreSubCommand,
     },
+
+    /// Export messages from the local store
+    #[command(about = "Export messages")]
+    Export(StoreExportOptions),
+
+    /// Import messages into the local store from a JSON file
+    #[command(about = "Import messages")]
+    Import(StoreImportOptions),
 }
 
 #[derive(Subcommand, Debug)]
@@ -1885,4 +1909,52 @@ pub struct ReportMentionsOpts {
     /// Time period (e.g. "30d")
     #[arg(long)]
     pub period: Option<String>,
+}
+
+// ============================================================================
+// Watch Command
+// ============================================================================
+
+#[derive(Args, Debug)]
+pub struct WatchCommand {
+    /// Channel names (#name) or IDs (C...) to watch
+    pub channels: Vec<String>,
+
+    /// Only show messages from this user (user ID)
+    #[arg(long)]
+    pub user: Option<String>,
+
+    /// Only show messages containing a URL
+    #[arg(long)]
+    pub has_link: bool,
+
+    /// Output format: "json" for one JSON object per line, "plain" for human-readable
+    #[arg(long, default_value = "plain")]
+    pub format: String,
+}
+
+// ============================================================================
+// Store Export / Import Commands
+// ============================================================================
+
+#[derive(Args, Debug)]
+pub struct StoreExportOptions {
+    /// Export format (json or csv)
+    #[arg(long, default_value = "json")]
+    pub format: String,
+
+    /// Filter by channel name (#name) or ID (C...)
+    #[arg(long)]
+    pub channel: Option<String>,
+
+    /// Output file path (default: stdout)
+    #[arg(long)]
+    pub output: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct StoreImportOptions {
+    /// Path to JSON file to import
+    #[arg(long)]
+    pub file: String,
 }

@@ -17,6 +17,7 @@ mod store;
 mod sync_cmd;
 mod unreads;
 mod user;
+mod watch;
 mod workflow;
 pub mod workspace;
 
@@ -231,6 +232,9 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
         }
         Command::Store { subcommand } => {
             store::handle_store(subcommand).await
+        }
+        Command::Watch(cmd) => {
+            watch::handle_watch(cmd).await
         }
         Command::Sync { subcommand } => {
             sync_cmd::handle_sync(subcommand, read_only).await

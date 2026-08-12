@@ -41,6 +41,8 @@ pub async fn handle_store(cmd: StoreCommand) -> Result<()> {
         StoreCommand::Gc => handle_store_gc().await,
         StoreCommand::Reset => handle_store_reset().await,
         StoreCommand::Sub { subcommand } => handle_store_sub(subcommand).await,
+        StoreCommand::Export(opts) => handle_store_export(opts).await,
+        StoreCommand::Import(opts) => handle_store_import(opts).await,
     }
 }
 
@@ -561,5 +563,122 @@ async fn handle_store_sub_list() -> Result<()> {
     }
 
     println!("{}", crate::output::to_json_output(&entries));
+    Ok(())
+}
+
+async fn handle_store_export(opts: crate::cli::StoreExportOptions) -> Result<()> {
+    let auth_result = crate::auth::resolve_auth(None)?;
+    let workspace_url = auth_result.workspace_url.clone().unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+
+    // Determine which channels to export
+    let channel_ids: Vec<String> = if let Some(ref ch) = opts.channel {
+        let client = crate::slack::SlackClient::new(auth_result.auth, auth_result.workspace_url);
+        let id = crate::slack::channels::resolve_channel_id(&client, ch).await?;
+        vec![id]
+    } else {
+        store.list_subscription_channel_ids()?
+    };
+
+    // Collect all messages
+    let mut all_messages: Vec<serde_json::Value> = Vec::new();
+    for ch_id in &channel_ids {
+        let messages = store.list_messages(ch_id, None, None, u32::MAX)?;
+        for msg in messages {
+            all_messages.push(serde_json::to_value(&msg).unwrap_or_default());
+        }
+    }
+
+    let output_str = if opts.format == "csv" {
+        // CSV format: ts,channel_id,user_id,text
+        let mut lines = vec!["ts,channel_id,user_id,text".to_string()];
+        for msg in &all_messages {
+            let ts = msg.get("ts").and_then(|v| v.as_str()).unwrap_or("");
+            let ch = msg.get("channel_id").and_then(|v| v.as_str()).unwrap_or("");
+            let user = msg.get("user_id").and_then(|v| v.as_str()).unwrap_or("");
+            let text = msg.get("text").and_then(|v| v.as_str()).unwrap_or("")
+                .replace('"', "\"\"");
+            lines.push(format!("{},{},{},\"{}\"", ts, ch, user, text));
+        }
+        lines.join("\n")
+    } else {
+        serde_json::to_string_pretty(&all_messages).unwrap_or_else(|_| "[]".to_string())
+    };
+
+    if let Some(ref path) = opts.output {
+        std::fs::write(path, &output_str).map_err(|e| {
+            crate::error::SlackersError::Store(format!("Failed to write to {}: {}", path, e))
+        })?;
+        #[derive(Serialize)]
+        struct ExportResult {
+            ok: bool,
+            messages_exported: usize,
+            output_file: String,
+        }
+        let result = ExportResult {
+            ok: true,
+            messages_exported: all_messages.len(),
+            output_file: path.clone(),
+        };
+        println!("{}", crate::output::to_json_output(&result));
+    } else {
+        print!("{}", output_str);
+    }
+
+    Ok(())
+}
+
+async fn handle_store_import(opts: crate::cli::StoreImportOptions) -> Result<()> {
+    let auth_result = crate::auth::resolve_auth(None)?;
+    let workspace_url = auth_result.workspace_url.unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+
+    let content = std::fs::read_to_string(&opts.file).map_err(|e| {
+        crate::error::SlackersError::Store(format!("Failed to read {}: {}", opts.file, e))
+    })?;
+
+    let messages: Vec<serde_json::Value> = serde_json::from_str(&content).map_err(|e| {
+        crate::error::SlackersError::Store(format!("Invalid JSON in {}: {}", opts.file, e))
+    })?;
+
+    let mut imported = 0usize;
+    for msg in &messages {
+        let channel_id = msg.get("channel_id").and_then(|v| v.as_str()).unwrap_or("");
+        let ts = msg.get("ts").and_then(|v| v.as_str()).unwrap_or("");
+
+        if channel_id.is_empty() || ts.is_empty() {
+            continue;
+        }
+
+        let user_id = msg.get("user_id").and_then(|v| v.as_str());
+        let thread_ts = msg.get("thread_ts").and_then(|v| v.as_str());
+        let text = msg.get("text").and_then(|v| v.as_str());
+        let rendered = msg.get("rendered").and_then(|v| v.as_str());
+        let subtype = msg.get("subtype").and_then(|v| v.as_str());
+        let reply_count = msg.get("reply_count").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        let raw_json = msg.get("raw_json").and_then(|v| v.as_str());
+
+        store.upsert_message(
+            channel_id, ts, user_id, thread_ts, text, rendered, subtype, reply_count, raw_json,
+        )?;
+        imported += 1;
+    }
+
+    #[derive(Serialize)]
+    struct ImportResult {
+        ok: bool,
+        messages_imported: usize,
+        source_file: String,
+    }
+
+    let result = ImportResult {
+        ok: true,
+        messages_imported: imported,
+        source_file: opts.file,
+    };
+
+    println!("{}", crate::output::to_json_output(&result));
     Ok(())
 }

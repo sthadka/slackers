@@ -77,6 +77,11 @@ fn can_use_local_search(
         return false;
     }
 
+    // --all-channels means search everything in the store (no channel filter needed)
+    if options.all_channels {
+        return true;
+    }
+
     // If channels are specified, all of them must be subscribed
     if !options.channel.is_empty() {
         // We need to resolve channel names to IDs, but we only have the store.
@@ -142,8 +147,10 @@ async fn handle_search_impl(
     let local_result = if kind == SearchKind::Messages || kind == SearchKind::All {
         if let Some(store) = try_open_store(auth_result.workspace_url.as_deref()) {
             if can_use_local_search(&kind, &options, &store) {
-                // Resolve channel filters to IDs for FTS5
-                let channel_id = if options.channel.len() == 1 {
+                // When --all-channels is set, don't filter by channel
+                let channel_id = if options.all_channels {
+                    None
+                } else if options.channel.len() == 1 {
                     let ch = &options.channel[0];
                     if ch.starts_with('C') || ch.starts_with('G') {
                         Some(ch.clone())
@@ -159,12 +166,37 @@ async fn handle_search_impl(
                     None
                 };
 
-                match store.search_messages(
-                    query,
-                    channel_id.as_deref(),
-                    options.limit,
-                ) {
-                    Ok(results) => Some(results),
+                let search_result = if options.highlight {
+                    store.search_with_highlight(
+                        query,
+                        channel_id.as_deref(),
+                        options.limit,
+                        "**",
+                        "**",
+                    )
+                } else {
+                    store.search_messages(
+                        query,
+                        channel_id.as_deref(),
+                        options.limit,
+                    )
+                };
+
+                match search_result {
+                    Ok(mut results) => {
+                        // Apply --regex post-filter if set
+                        if let Some(ref pattern) = options.regex {
+                            if let Ok(re) = regex::Regex::new(pattern) {
+                                results.retain(|r| {
+                                    let text = r.rendered.as_deref()
+                                        .or(r.text.as_deref())
+                                        .unwrap_or("");
+                                    re.is_match(text)
+                                });
+                            }
+                        }
+                        Some(results)
+                    }
                     Err(_) => None, // Fall back to API on FTS5 errors
                 }
             } else {

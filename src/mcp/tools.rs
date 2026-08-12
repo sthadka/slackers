@@ -796,6 +796,61 @@ pub fn all_tools() -> Vec<ToolDef> {
             }),
             is_write: true,
         },
+        // ---- Store ----
+        ToolDef {
+            name: "store_search",
+            description: "FTS5 full-text search over locally synced messages",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": prop("FTS5 search query string"),
+                    "channel": prop("Channel filter (#name, name, or ID)"),
+                    "after": prop("Only results after YYYY-MM-DD"),
+                    "before": prop("Only results before YYYY-MM-DD"),
+                    "limit": int_prop("Max results (default 20)")
+                },
+                "required": ["query"]
+            }),
+            is_write: false,
+        },
+        ToolDef {
+            name: "store_query_messages",
+            description: "Query messages from the local store with flexible filters",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "channel": prop("Channel filter (#name, name, or ID)"),
+                    "user": prop("User ID filter"),
+                    "after": prop("Only messages after this time"),
+                    "before": prop("Only messages before this time"),
+                    "text": prop("Text substring filter"),
+                    "limit": int_prop("Max results (default 50)")
+                }
+            }),
+            is_write: false,
+        },
+        ToolDef {
+            name: "store_channel_summary",
+            description: "Get recent messages and active users for a channel from local store",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "channel": prop("Channel name (#name) or ID (C...)"),
+                    "limit": int_prop("Max messages (default 20)")
+                },
+                "required": ["channel"]
+            }),
+            is_write: false,
+        },
+        ToolDef {
+            name: "store_sync_status",
+            description: "Show sync state and freshness for all subscribed channels",
+            input_schema: json!({
+                "type": "object",
+                "properties": {}
+            }),
+            is_write: false,
+        },
         // ---- Slash ----
         ToolDef {
             name: "slash_run",
@@ -1248,6 +1303,39 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
             for part in cmd.split_whitespace() {
                 cli.push(part.to_string());
             }
+        }
+        "store_search" => {
+            cli.push("search".into());
+            cli.push("messages".into());
+            cli.push(str_req(args, "query"));
+            if let Some(v) = str_val(args, "channel") { cli.push("--channel".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "after") { cli.push("--after".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "before") { cli.push("--before".into()); cli.push(v); }
+            if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
+        }
+        "store_query_messages" => {
+            cli.push("query".into());
+            cli.push("messages".into());
+            if let Some(v) = str_val(args, "channel") { cli.push("--channel".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "user") { cli.push("--user".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "after") { cli.push("--after".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "before") { cli.push("--before".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "text") { cli.push("--text".into()); cli.push(v); }
+            if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
+        }
+        "store_channel_summary" => {
+            cli.push("query".into());
+            cli.push("messages".into());
+            cli.push("--channel".into()); cli.push(str_req(args, "channel"));
+            if let Some(v) = int_val(args, "limit") {
+                cli.push("--limit".into()); cli.push(v.to_string());
+            } else {
+                cli.push("--limit".into()); cli.push("20".into());
+            }
+        }
+        "store_sync_status" => {
+            cli.push("sync".into());
+            cli.push("status".into());
         }
         _ => return None,
     }
