@@ -29,6 +29,9 @@ pub enum SlackersError {
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
 
+    #[error("Store error: {0}")]
+    Store(String),
+
     #[error("{0}")]
     Other(String),
 }
@@ -139,6 +142,7 @@ impl SlackersError {
             SlackersError::Io(_) => "io",
             SlackersError::Json(_) | SlackersError::Parse(_) => "parse",
             SlackersError::Database(_) => "database",
+            SlackersError::Store(_) => "store",
             SlackersError::Config(_) | SlackersError::Other(_) => "other",
         }
     }
@@ -156,6 +160,7 @@ impl SlackersError {
 
     pub fn exit_code(&self) -> i32 {
         match self {
+            SlackersError::Store(_) => 1,
             SlackersError::Auth(_) => 3,
             SlackersError::Http(_) => 4,
             SlackersError::SlackApi { .. } => 5,

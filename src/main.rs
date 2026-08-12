@@ -8,6 +8,7 @@ mod mcp;
 mod output;
 mod render;
 mod slack;
+mod store;
 mod target;
 mod util;
 

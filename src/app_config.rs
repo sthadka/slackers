@@ -16,6 +16,63 @@ use std::path::PathBuf;
 #[serde(default)]
 pub struct AppConfig {
     pub history: HistoryConfig,
+    pub store: StoreConfig,
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct StoreConfig {
+    pub enabled: bool,
+    pub sync_scope: SyncScope,
+    pub store_raw_json: bool,
+    pub max_db_size_mb: Option<u32>,
+    pub auto_gc: bool,
+    pub defaults: StoreDefaults,
+}
+
+impl Default for StoreConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            sync_scope: SyncScope::default(),
+            store_raw_json: false,
+            max_db_size_mb: None,
+            auto_gc: true,
+            defaults: StoreDefaults::default(),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct StoreDefaults {
+    pub retention_days: Option<u32>,
+    pub sync_threads: bool,
+    pub sync_members: bool,
+    pub sync_files: bool,
+    pub max_file_size_mb: Option<u32>,
+}
+
+impl Default for StoreDefaults {
+    fn default() -> Self {
+        Self {
+            retention_days: Some(90),
+            sync_threads: true,
+            sync_members: false,
+            sync_files: false,
+            max_file_size_mb: Some(10),
+        }
+    }
+}
+
+#[derive(Deserialize, Default, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncScope {
+    #[default]
+    Public,
+    PublicPrivate,
+    All,
+    Selected,
 }
 
 #[derive(Deserialize)]
