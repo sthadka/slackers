@@ -11,11 +11,45 @@ use crate::slack::{
     to_compact_message, CompactMessageOptions, MessageFilter, SlackClient,
 };
 use crate::slack::user_cache::{collect_referenced_user_ids, resolve_users_by_id, to_referenced_users};
+use crate::store::messages::StoredMessage;
 use crate::target::{parse_msg_target, MsgTarget};
 use chrono::NaiveDate;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::{json, Value};
 use std::time::Duration;
+
+/// Convert a `StoredMessage` to a JSON value matching the `CompactSlackMessage` shape.
+/// Uses `rendered` text if available, otherwise falls back to `text`.
+fn stored_message_to_compact_json(msg: &StoredMessage) -> Value {
+    let display_text = msg.rendered.as_deref()
+        .or(msg.text.as_deref())
+        .unwrap_or("");
+    let mut obj = json!({
+        "ts": msg.ts,
+        "text": display_text,
+    });
+    if let Some(ref user_id) = msg.user_id {
+        obj["user"] = json!(user_id);
+    }
+    if let Some(ref thread_ts) = msg.thread_ts {
+        obj["thread_ts"] = json!(thread_ts);
+    }
+    if msg.reply_count > 0 {
+        obj["reply_count"] = json!(msg.reply_count);
+    }
+    // If raw_json is available, extract reactions and files from it
+    if let Some(ref raw) = msg.raw_json {
+        if let Ok(raw_val) = serde_json::from_str::<Value>(raw) {
+            if let Some(reactions) = raw_val.get("reactions") {
+                obj["reactions"] = reactions.clone();
+            }
+            if let Some(files) = raw_val.get("files") {
+                obj["files"] = files.clone();
+            }
+        }
+    }
+    obj
+}
 
 pub async fn handle_message(subcommand: MessageCommand) -> Result<()> {
     match subcommand {
@@ -75,7 +109,36 @@ async fn handle_message_get(target: &str, options: MessageGetOptions) -> Result<
         }
     };
 
-    // Resolve auth
+    // Try local store first
+    let store = workspace_url.as_deref()
+        .and_then(|url| crate::config::open_store_if_enabled(url).ok().flatten());
+
+    if let Some(ref store) = store {
+        if store.is_subscribed(&channel_id).unwrap_or(false) {
+            if let Ok(Some(stored_msg)) = store.get_message(&channel_id, &message_ts) {
+                let mut output = stored_message_to_compact_json(&stored_msg);
+
+                // Add thread summary from store if this looks like a thread root
+                if stored_msg.reply_count > 0 {
+                    if let Some(obj) = output.as_object_mut() {
+                        obj.insert("thread_summary".to_string(), json!({
+                            "reply_count": stored_msg.reply_count,
+                            "thread_ts": stored_msg.ts,
+                        }));
+                    }
+                }
+
+                if let Some(obj) = output.as_object_mut() {
+                    obj.insert("source".to_string(), json!("local_store"));
+                }
+
+                println!("{}", to_json_output(&output));
+                return Ok(());
+            }
+        }
+    }
+
+    // Fall back to API
     let auth_result = resolve_auth(workspace_url.as_deref())?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
@@ -202,27 +265,87 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         }
     };
 
-    // Resolve auth
+    // Try local store first for thread data
+    let store = workspace_url.as_deref()
+        .and_then(|url| crate::config::open_store_if_enabled(url).ok().flatten());
+
+    let from_store = store.as_ref().map_or(false, |s| {
+        s.is_subscribed(&channel_id).unwrap_or(false)
+            && s.list_thread(&channel_id, &thread_ts)
+                .map_or(false, |msgs| !msgs.is_empty())
+    });
+
+    // Resolve auth (needed for API path and user resolution)
     let auth_result = resolve_auth(workspace_url.as_deref())?;
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
-    // Fetch thread
-    let mut messages = fetch_thread(&client, &channel_id, &thread_ts).await?;
+    let mut compact_messages: Vec<Value>;
+    let mut all_downloaded_files: Vec<Value> = Vec::new();
 
-    // Apply filters if specified
-    let filter = MessageFilter {
-        user: options.user.clone(),
-        has_link: options.has_link,
-        has_file: options.has_file,
-        has_reaction: options.has_reaction,
-    };
+    if from_store {
+        // Serve from local store
+        let stored_msgs = store.as_ref().unwrap()
+            .list_thread(&channel_id, &thread_ts)?;
+        compact_messages = stored_msgs.iter()
+            .map(stored_message_to_compact_json)
+            .collect();
+    } else {
+        // Fetch thread from API
+        let mut messages = fetch_thread(&client, &channel_id, &thread_ts).await?;
 
-    messages = filter_messages(messages, &filter);
+        // Apply filters if specified
+        let filter = MessageFilter {
+            user: options.user.clone(),
+            has_link: options.has_link,
+            has_file: options.has_file,
+            has_reaction: options.has_reaction,
+        };
 
-    // Apply --with-reaction filter (client-side)
+        messages = filter_messages(messages, &filter);
+
+        // Convert to compact messages
+        let max_chars = if options.max_body_chars < 0 {
+            None
+        } else {
+            Some(options.max_body_chars as usize)
+        };
+
+        let compact_options = CompactMessageOptions {
+            max_content_chars: max_chars,
+            include_thread_ts: false,
+        };
+
+        compact_messages = Vec::new();
+        for msg in &messages {
+            let compact = to_compact_message(msg, &compact_options);
+            compact_messages.push(serde_json::to_value(compact)?);
+        }
+
+        // Download files from all messages
+        for msg in &messages {
+            if let Some(files) = msg.get("files").and_then(|v| v.as_array()) {
+                for file in files {
+                    match download_file(&client, file, &auth_result.auth, auth_result.workspace_url.as_deref()).await {
+                        Ok(path) => {
+                            all_downloaded_files.push(json!({
+                                "id": file.get("id").and_then(|v| v.as_str()).unwrap_or(""),
+                                "name": file.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                                "local_path": path.to_string_lossy()
+                            }));
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to download file: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Apply reaction filters (work on both store and API results)
     if let Some(ref reaction_name) = options.with_reaction {
         let name = reaction_name.trim_matches(':');
-        messages.retain(|msg| {
+        compact_messages.retain(|msg| {
             msg.get("reactions")
                 .and_then(|v| v.as_array())
                 .map(|arr| arr.iter().any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name)))
@@ -230,10 +353,9 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         });
     }
 
-    // Apply --without-reaction filter (client-side)
     if let Some(ref reaction_name) = options.without_reaction {
         let name = reaction_name.trim_matches(':');
-        messages.retain(|msg| {
+        compact_messages.retain(|msg| {
             !msg.get("reactions")
                 .and_then(|v| v.as_array())
                 .map(|arr| arr.iter().any(|r| r.get("name").and_then(|n| n.as_str()) == Some(name)))
@@ -243,46 +365,7 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
 
     // Apply limit if specified
     if let Some(limit) = options.limit {
-        messages.truncate(limit);
-    }
-
-    // Convert to compact messages
-    let max_chars = if options.max_body_chars < 0 {
-        None
-    } else {
-        Some(options.max_body_chars as usize)
-    };
-
-    let compact_options = CompactMessageOptions {
-        max_content_chars: max_chars,
-        include_thread_ts: false, // Don't include thread_ts in each message (redundant)
-    };
-
-    let mut compact_messages = Vec::new();
-    for msg in &messages {
-        let compact = to_compact_message(msg, &compact_options);
-        compact_messages.push(serde_json::to_value(compact)?);
-    }
-
-    // Download files from all messages
-    let mut all_downloaded_files = Vec::new();
-    for msg in &messages {
-        if let Some(files) = msg.get("files").and_then(|v| v.as_array()) {
-            for file in files {
-                match download_file(&client, file, &auth_result.auth, auth_result.workspace_url.as_deref()).await {
-                    Ok(path) => {
-                        all_downloaded_files.push(json!({
-                            "id": file.get("id").and_then(|v| v.as_str()).unwrap_or(""),
-                            "name": file.get("name").and_then(|v| v.as_str()).unwrap_or(""),
-                            "local_path": path.to_string_lossy()
-                        }));
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Failed to download file: {}", e);
-                    }
-                }
-            }
-        }
+        compact_messages.truncate(limit);
     }
 
     let mut referenced_users_map = None;
@@ -310,6 +393,12 @@ async fn handle_message_list(target: &str, options: MessageListOptions) -> Resul
         "thread_ts": thread_ts,
         "messages": compact_messages
     });
+
+    if from_store {
+        if let Some(obj) = output.as_object_mut() {
+            obj.insert("source".to_string(), json!("local_store"));
+        }
+    }
 
     if let Some(ref_users) = referenced_users_map {
         if let Some(obj) = output.as_object_mut() {
