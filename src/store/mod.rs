@@ -1,5 +1,6 @@
 pub mod channels;
 pub mod files;
+pub mod fts;
 pub mod messages;
 pub mod reactions;
 mod schema;
