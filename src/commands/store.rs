@@ -252,19 +252,314 @@ async fn handle_store_reset() -> Result<()> {
     Ok(())
 }
 
+/// Combined subscription + sync state entry for `store sub list` output.
+#[derive(Serialize)]
+struct SubListEntry {
+    channel_id: String,
+    channel_name: Option<String>,
+    subscribed_at: i64,
+    retention_days: Option<u32>,
+    sync_threads: bool,
+    sync_members: bool,
+    sync_state: Option<SubSyncState>,
+}
+
+/// Sync state portion of a subscription list entry.
+#[derive(Serialize)]
+struct SubSyncState {
+    oldest_ts: Option<String>,
+    newest_ts: Option<String>,
+    is_complete: bool,
+    last_sync: i64,
+}
+
+/// Parse a retention string like "30d", "90d" into a number of days.
+fn parse_retention_days(s: &str) -> Result<u32> {
+    let s = s.trim();
+    let num_str = if s.ends_with('d') || s.ends_with('D') {
+        &s[..s.len() - 1]
+    } else {
+        s
+    };
+    num_str.parse::<u32>().map_err(|_| {
+        crate::error::SlackersError::Store(format!(
+            "Invalid retention value '{}'. Expected format like '30d' or '90d'.",
+            s
+        ))
+    })
+}
+
 async fn handle_store_sub(cmd: StoreSubCommand) -> Result<()> {
     match cmd {
-        StoreSubCommand::Add(_opts) => {
-            eprintln!("Not yet implemented. Use `slackers store sub add` once subscription management is available.");
-            Ok(())
-        }
-        StoreSubCommand::Remove(_opts) => {
-            eprintln!("Not yet implemented. Use `slackers store sub remove` once subscription management is available.");
-            Ok(())
-        }
-        StoreSubCommand::List => {
-            eprintln!("Not yet implemented. Use `slackers store sub list` once subscription management is available.");
-            Ok(())
+        StoreSubCommand::Add(opts) => handle_store_sub_add(opts).await,
+        StoreSubCommand::Remove(opts) => handle_store_sub_remove(opts).await,
+        StoreSubCommand::List => handle_store_sub_list().await,
+    }
+}
+
+async fn handle_store_sub_add(opts: crate::cli::StoreSubAddOptions) -> Result<()> {
+    let auth_result = crate::auth::resolve_auth(None)?;
+    let workspace_url = auth_result.workspace_url.clone().unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+    let client = crate::slack::SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    let retention_days = match &opts.retention {
+        Some(r) => Some(parse_retention_days(r)?),
+        None => None,
+    };
+    let sync_threads = !opts.no_threads;
+    let sync_members = opts.with_members;
+
+    // Handle --pattern: subscribe to all channels matching a glob
+    if let Some(pattern) = &opts.pattern {
+        return handle_pattern_subscribe(
+            &client,
+            &store,
+            pattern,
+            retention_days,
+            sync_threads,
+            sync_members,
+        )
+        .await;
+    }
+
+    // Handle --dm: subscribe to a DM channel
+    if let Some(dm_user) = &opts.dm {
+        return handle_dm_subscribe(
+            &client,
+            &store,
+            dm_user,
+            retention_days,
+            sync_threads,
+            sync_members,
+        )
+        .await;
+    }
+
+    // Normal channel subscription
+    let channel_input = &opts.channel;
+    let channel_id =
+        crate::slack::channels::resolve_channel_id(&client, channel_input).await?;
+    let channel_name = channel_input
+        .strip_prefix('#')
+        .unwrap_or(channel_input)
+        .to_string();
+
+    store.add_subscription(
+        &channel_id,
+        Some(&channel_name),
+        retention_days,
+        sync_threads,
+        sync_members,
+    )?;
+
+    #[derive(Serialize)]
+    struct SubAddResult {
+        ok: bool,
+        channel_id: String,
+        channel_name: String,
+        retention_days: Option<u32>,
+        sync_threads: bool,
+        sync_members: bool,
+    }
+
+    let result = SubAddResult {
+        ok: true,
+        channel_id,
+        channel_name,
+        retention_days,
+        sync_threads,
+        sync_members,
+    };
+
+    println!("{}", crate::output::to_json_output(&result));
+    Ok(())
+}
+
+/// Subscribe to all channels matching a glob pattern (e.g. "eng-*").
+async fn handle_pattern_subscribe(
+    client: &crate::slack::SlackClient,
+    store: &crate::store::Store,
+    pattern: &str,
+    retention_days: Option<u32>,
+    sync_threads: bool,
+    sync_members: bool,
+) -> Result<()> {
+    let channels = crate::slack::channels::list_conversations(
+        client,
+        None,
+        true,
+        None,
+        true,
+        None,
+    )
+    .await?;
+
+    let glob = glob::Pattern::new(pattern).map_err(|e| {
+        crate::error::SlackersError::Store(format!("Invalid glob pattern '{}': {}", pattern, e))
+    })?;
+
+    let mut subscribed: Vec<serde_json::Value> = Vec::new();
+
+    for ch in &channels {
+        if let Some(name) = &ch.name {
+            if glob.matches(name) {
+                store.add_subscription(
+                    &ch.id,
+                    Some(name),
+                    retention_days,
+                    sync_threads,
+                    sync_members,
+                )?;
+                subscribed.push(serde_json::json!({
+                    "channel_id": ch.id,
+                    "channel_name": name,
+                }));
+            }
         }
     }
+
+    #[derive(Serialize)]
+    struct PatternResult {
+        ok: bool,
+        pattern: String,
+        subscribed_count: usize,
+        channels: Vec<serde_json::Value>,
+    }
+
+    let result = PatternResult {
+        ok: true,
+        pattern: pattern.to_string(),
+        subscribed_count: subscribed.len(),
+        channels: subscribed,
+    };
+
+    println!("{}", crate::output::to_json_output(&result));
+    Ok(())
+}
+
+/// Subscribe to a DM channel by resolving a user handle or ID.
+async fn handle_dm_subscribe(
+    client: &crate::slack::SlackClient,
+    store: &crate::store::Store,
+    dm_user: &str,
+    retention_days: Option<u32>,
+    sync_threads: bool,
+    sync_members: bool,
+) -> Result<()> {
+    // Resolve user to get their ID
+    let user = crate::slack::users::get_user(client, dm_user).await?;
+    let user_id = &user.id;
+
+    // Open DM conversation to get channel ID
+    let conv = client.open_conversation(vec![user_id.clone()]).await?;
+    let channel_id = conv.id;
+
+    let display_name = user
+        .display_name
+        .as_deref()
+        .or(user.real_name.as_deref())
+        .or(user.name.as_deref())
+        .unwrap_or(user_id);
+
+    let channel_name = format!("dm-{}", display_name);
+
+    store.add_subscription(
+        &channel_id,
+        Some(&channel_name),
+        retention_days,
+        sync_threads,
+        sync_members,
+    )?;
+
+    #[derive(Serialize)]
+    struct DmSubResult {
+        ok: bool,
+        channel_id: String,
+        channel_name: String,
+        user_id: String,
+        retention_days: Option<u32>,
+        sync_threads: bool,
+        sync_members: bool,
+    }
+
+    let result = DmSubResult {
+        ok: true,
+        channel_id,
+        channel_name,
+        user_id: user_id.clone(),
+        retention_days,
+        sync_threads,
+        sync_members,
+    };
+
+    println!("{}", crate::output::to_json_output(&result));
+    Ok(())
+}
+
+async fn handle_store_sub_remove(opts: crate::cli::StoreSubRemoveOptions) -> Result<()> {
+    let auth_result = crate::auth::resolve_auth(None)?;
+    let workspace_url = auth_result.workspace_url.clone().unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+    let client = crate::slack::SlackClient::new(auth_result.auth, auth_result.workspace_url);
+
+    let channel_input = &opts.channel;
+    let channel_id =
+        crate::slack::channels::resolve_channel_id(&client, channel_input).await?;
+
+    store.remove_subscription(&channel_id)?;
+
+    #[derive(Serialize)]
+    struct SubRemoveResult {
+        ok: bool,
+        channel_id: String,
+        message: String,
+    }
+
+    let channel_name = channel_input
+        .strip_prefix('#')
+        .unwrap_or(channel_input)
+        .to_string();
+
+    let result = SubRemoveResult {
+        ok: true,
+        channel_id,
+        message: format!("Unsubscribed from #{}", channel_name),
+    };
+
+    println!("{}", crate::output::to_json_output(&result));
+    Ok(())
+}
+
+async fn handle_store_sub_list() -> Result<()> {
+    let auth_result = crate::auth::resolve_auth(None)?;
+    let workspace_url = auth_result.workspace_url.unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+
+    let subs = store.list_subscriptions()?;
+
+    let mut entries: Vec<SubListEntry> = Vec::new();
+    for sub in &subs {
+        let sync_state = store.get_sync_state(&sub.channel_id)?;
+        entries.push(SubListEntry {
+            channel_id: sub.channel_id.clone(),
+            channel_name: sub.channel_name.clone(),
+            subscribed_at: sub.subscribed_at,
+            retention_days: sub.retention_days,
+            sync_threads: sub.sync_threads,
+            sync_members: sub.sync_members,
+            sync_state: sync_state.map(|s| SubSyncState {
+                oldest_ts: s.oldest_ts,
+                newest_ts: s.newest_ts,
+                is_complete: s.is_complete,
+                last_sync: s.last_sync,
+            }),
+        });
+    }
+
+    println!("{}", crate::output::to_json_output(&entries));
+    Ok(())
 }
