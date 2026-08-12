@@ -1,4 +1,5 @@
 use crate::error::{ConfigError, Result};
+use crate::store::Store;
 use std::path::PathBuf;
 
 /// Get the credentials file path: ~/.config/slackers/credentials.json
@@ -76,6 +77,17 @@ pub fn store_db_path(workspace_url: &str) -> Result<PathBuf> {
         .ok_or(ConfigError::DirectoryNotFound)?;
     let hash = hash_workspace_url(workspace_url);
     Ok(data_dir.join("slackers").join(format!("store-{}.db", hash)))
+}
+
+/// Open the SQLite store if the `[store] enabled = true` setting is active.
+/// Returns `Ok(None)` when the store is disabled (the default).
+pub fn open_store_if_enabled(workspace_url: &str) -> Result<Option<Store>> {
+    let config = crate::app_config::load_app_config();
+    if !config.store.enabled {
+        return Ok(None);
+    }
+    let path = store_db_path(workspace_url)?;
+    Ok(Some(Store::open(&path)?))
 }
 
 #[cfg(test)]

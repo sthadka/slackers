@@ -79,6 +79,11 @@ pub struct SlackClient {
 }
 
 impl SlackClient {
+    /// Get the workspace URL if available.
+    pub fn workspace_url(&self) -> Option<&str> {
+        self.workspace_url.as_deref()
+    }
+
     pub fn new(auth: WorkspaceAuth, workspace_url: Option<String>) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))

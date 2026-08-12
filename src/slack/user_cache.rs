@@ -1,3 +1,4 @@
+use crate::config::hash_workspace_url;
 use crate::slack::users::{get_user, CompactSlackUser};
 use crate::slack::SlackClient;
 use regex::Regex;
@@ -8,6 +9,7 @@ use std::sync::LazyLock;
 
 const CACHE_VERSION: u32 = 1;
 const USER_TTL_MS: u64 = 24 * 60 * 60 * 1000;
+const USER_TTL_SECS: i64 = 24 * 60 * 60;
 
 static USER_ID_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[UW][A-Z0-9]{8,}$").unwrap());
@@ -31,31 +33,6 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
-}
-
-fn hash_workspace_url(workspace_url: &str) -> String {
-    let trimmed = workspace_url.trim();
-    if trimmed.is_empty() {
-        return "unknown".to_string();
-    }
-
-    let source = if let Ok(url) = url::Url::parse(trimmed) {
-        url.host_str()
-            .unwrap_or(trimmed)
-            .to_lowercase()
-    } else {
-        trimmed.to_lowercase()
-    };
-
-    if source.is_empty() || source == "unknown" {
-        return "unknown".to_string();
-    }
-
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let mut hasher = DefaultHasher::new();
-    source.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
 }
 
 fn cache_path(workspace_url: &str) -> Option<PathBuf> {
@@ -116,8 +93,67 @@ pub async fn resolve_users_by_id(
         return HashMap::new();
     }
 
+    // Try store path if enabled
+    let store = workspace_url
+        .and_then(|url| crate::config::open_store_if_enabled(url).ok().flatten());
+
+    if let Some(ref store) = store {
+        return resolve_users_via_store(client, store, &unique_ids, force_refresh).await;
+    }
+
+    // Fallback: JSON file cache
+    resolve_users_via_json_cache(client, workspace_url, &unique_ids, force_refresh).await
+}
+
+/// Store-backed user resolution with 24-hour TTL.
+async fn resolve_users_via_store(
+    client: &SlackClient,
+    store: &crate::store::Store,
+    unique_ids: &[String],
+    force_refresh: bool,
+) -> HashMap<String, CompactSlackUser> {
+    let mut out = HashMap::new();
+    let mut missing = Vec::new();
+
+    if !force_refresh {
+        if let Ok(fresh) = store.get_fresh_users_by_ids(unique_ids, USER_TTL_SECS) {
+            for user in fresh {
+                out.insert(user.id.clone(), user);
+            }
+        }
+        for uid in unique_ids {
+            if !out.contains_key(uid) {
+                missing.push(uid.clone());
+            }
+        }
+    } else {
+        missing = unique_ids.to_vec();
+    }
+
+    let mut fetched = Vec::new();
+    for uid in &missing {
+        if let Ok(user) = get_user(client, uid).await {
+            out.insert(uid.clone(), user.clone());
+            fetched.push(user);
+        }
+    }
+
+    if !fetched.is_empty() {
+        let _ = store.upsert_users(&fetched);
+    }
+
+    out
+}
+
+/// JSON file cache fallback (original behavior).
+async fn resolve_users_via_json_cache(
+    client: &SlackClient,
+    workspace_url: Option<&str>,
+    unique_ids: &[String],
+    force_refresh: bool,
+) -> HashMap<String, CompactSlackUser> {
     let now = now_ms();
-    let cp = workspace_url.and_then(|u| cache_path(u));
+    let cp = workspace_url.and_then(cache_path);
     let mut disk_cache = cp.as_ref().map(|p| load_cache(p)).unwrap_or(UserCacheFile {
         version: CACHE_VERSION,
         entries: HashMap::new(),
@@ -126,7 +162,7 @@ pub async fn resolve_users_by_id(
     let mut out = HashMap::new();
     let mut missing = Vec::new();
 
-    for uid in &unique_ids {
+    for uid in unique_ids {
         if !force_refresh {
             if let Some(entry) = disk_cache.entries.get(uid) {
                 if now - entry.fetched_at < USER_TTL_MS {
@@ -262,6 +298,7 @@ mod tests {
 
     #[test]
     fn test_hash_workspace_url() {
+        // Uses crate::config::hash_workspace_url via the import
         let hash1 = hash_workspace_url("https://myteam.slack.com");
         let hash2 = hash_workspace_url("https://myteam.slack.com/");
         assert_eq!(hash1, hash2);

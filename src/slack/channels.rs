@@ -261,19 +261,33 @@ pub fn normalize_channel_input(input: &str) -> ChannelInput {
 /// Resolve a channel input (name or ID) to a channel ID.
 ///
 /// If already an ID, returns it directly.
-/// Otherwise checks ~/.config/slackers/channel-cache.json first, then
-/// paginates through conversations.list and caches the result.
+/// When the local store is enabled, checks SQLite first, then falls back to
+/// the Slack API and writes results to the store.
+/// When the store is disabled, uses the JSON channel-cache file.
 pub async fn resolve_channel_id(client: &SlackClient, input: &str) -> Result<String> {
     let normalized = normalize_channel_input(input);
 
     match normalized {
         ChannelInput::Id(id) => Ok(id),
         ChannelInput::Name(name) => {
+            // Try store first if enabled
+            let store = client
+                .workspace_url()
+                .and_then(|url| crate::config::open_store_if_enabled(url).ok().flatten());
+
+            if let Some(ref store) = store {
+                if let Ok(Some(ch)) = store.get_channel_by_name(&name) {
+                    return Ok(ch.id);
+                }
+            }
+
+            // Fallback to JSON cache
             let mut cache = load_channel_cache();
             if let Some(id) = cache.get(&name) {
                 return Ok(id.clone());
             }
-            let id = find_channel_by_name(client, &name, &mut cache).await?;
+
+            let id = find_channel_by_name(client, &name, &mut cache, store.as_ref()).await?;
             save_channel_cache(&cache);
             Ok(id)
         }
@@ -282,13 +296,16 @@ pub async fn resolve_channel_id(client: &SlackClient, input: &str) -> Result<Str
 
 /// Find a channel ID by name via conversations.list pagination.
 ///
-/// Bulk-populates the cache with every channel seen during the scan so
+/// Bulk-populates the JSON cache with every channel seen during the scan so
 /// subsequent lookups for different channels can hit the cache.
+/// When a `store` is provided, each discovered channel is also upserted into
+/// the SQLite store.
 #[allow(dead_code)]
 async fn find_channel_by_name(
     client: &SlackClient,
     name: &str,
     cache: &mut std::collections::HashMap<String, String>,
+    store: Option<&crate::store::Store>,
 ) -> Result<String> {
     let mut cursor: Option<String> = None;
     let mut found_id: Option<String> = None;
@@ -312,6 +329,10 @@ async fn find_channel_by_name(
                     channel.get("id").and_then(|v| v.as_str()),
                 ) {
                     cache.insert(channel_name.to_string(), id.to_string());
+                    if let Some(store) = store {
+                        let compact = to_compact_channel(channel);
+                        let _ = store.upsert_channel(&compact);
+                    }
                     if channel_name == name {
                         found_id = Some(id.to_string());
                     }

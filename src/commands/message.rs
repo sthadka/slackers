@@ -511,6 +511,12 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
 
     let channel_id = resolve_channel_id(&client, channel).await?;
 
+    // Open store if enabled (for sync_state cursor tracking)
+    let store = auth_result
+        .workspace_url
+        .as_deref()
+        .and_then(|url| crate::config::open_store_if_enabled(url).ok().flatten());
+
     // Determine output file: explicit --output or <channel>-history.json in CWD.
     let output_path = {
         let default_name = format!("{}-history.json", channel.trim_start_matches('#'));
@@ -528,7 +534,7 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     }
 
     // Derive resume ts from the file; fall back to cursor store.
-    let mut cursors = load_history_cursors();
+    let mut cursors = if store.is_none() { load_history_cursors() } else { HashMap::new() };
     let resume_ts = if options.before.is_none() {
         output_messages
             .last()
@@ -537,7 +543,15 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
             .map(|s| s.to_string())
             .or_else(|| {
                 if config.history.auto_resume {
-                    cursors.get(&channel_id).cloned()
+                    if let Some(ref store) = store {
+                        store
+                            .get_sync_state(&channel_id)
+                            .ok()
+                            .flatten()
+                            .and_then(|s| s.cursor)
+                    } else {
+                        cursors.get(&channel_id).cloned()
+                    }
                 } else {
                     None
                 }
@@ -677,8 +691,12 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
             .and_then(|m| m.get("ts"))
             .and_then(|v| v.as_str())
         {
-            cursors.insert(channel_id.clone(), oldest_ts.to_string());
-            save_history_cursors(&cursors);
+            if let Some(ref store) = store {
+                let _ = store.set_sync_cursor(&channel_id, oldest_ts);
+            } else {
+                cursors.insert(channel_id.clone(), oldest_ts.to_string());
+                save_history_cursors(&cursors);
+            }
         }
 
         bar.set_message(String::new());
@@ -692,8 +710,12 @@ async fn handle_message_history(channel: &str, options: MessageHistoryOptions) -
     ));
 
     // Clear cursor on clean completion.
-    cursors.remove(&channel_id);
-    save_history_cursors(&cursors);
+    if let Some(ref store) = store {
+        let _ = store.update_sync_state(&channel_id, None, None, None, false);
+    } else {
+        cursors.remove(&channel_id);
+        save_history_cursors(&cursors);
+    }
 
     let resume_before = output_messages
         .last()

@@ -115,6 +115,41 @@ impl Store {
         Ok(result)
     }
 
+    /// Get multiple users by their Slack IDs, filtering out entries older than `max_age_secs`.
+    pub fn get_fresh_users_by_ids(
+        &self,
+        ids: &[String],
+        max_age_secs: i64,
+    ) -> Result<Vec<CompactSlackUser>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().map_err(|e| {
+            crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+        })?;
+        let cutoff = now_epoch() - max_age_secs;
+        let placeholders: String = std::iter::repeat("?")
+            .take(ids.len())
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT {} FROM users WHERE id IN ({}) AND synced_at >= ?{}",
+            USER_COLUMNS,
+            placeholders,
+            ids.len() + 1
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            ids.iter().map(|s| s as &dyn rusqlite::types::ToSql).collect();
+        params.push(&cutoff);
+        let rows = stmt.query_map(params.as_slice(), row_to_user)?;
+        let mut users = Vec::new();
+        for row in rows {
+            users.push(row?);
+        }
+        Ok(users)
+    }
+
     /// Get multiple users by their Slack IDs.
     pub fn get_users_by_ids(&self, ids: &[String]) -> Result<Vec<CompactSlackUser>> {
         if ids.is_empty() {
