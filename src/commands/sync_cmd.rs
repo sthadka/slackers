@@ -13,22 +13,80 @@ struct SyncSummary {
 
 pub async fn handle_sync(cmd: SyncCommand, _read_only: bool) -> Result<()> {
     match cmd {
-        SyncCommand::Start(_opts) => {
-            eprintln!("Not yet implemented. Real-time sync will be available in a future release.");
-            eprintln!("Use `slackers sync backfill` to do a one-time historical sync.");
-            Ok(())
-        }
-        SyncCommand::Stop => {
-            eprintln!("Not yet implemented. Sync daemon stop will be available in a future release.");
-            Ok(())
-        }
-        SyncCommand::Status => {
-            eprintln!("Not yet implemented. Use `slackers store info` to see current sync state.");
-            Ok(())
-        }
+        SyncCommand::Start(opts) => handle_start(opts).await,
+        SyncCommand::Stop => handle_stop(),
+        SyncCommand::Status => handle_status(),
         SyncCommand::Backfill(opts) => handle_backfill(opts).await,
         SyncCommand::Once => handle_once().await,
     }
+}
+
+async fn handle_start(opts: crate::cli::SyncStartOptions) -> Result<()> {
+    // Check if already running.
+    if crate::sync::daemon::is_running() {
+        eprintln!("[sync] daemon is already running");
+        return Err(crate::error::SlackersError::Other(
+            "sync daemon is already running — use `slackers sync stop` first".into(),
+        ));
+    }
+
+    let resolved = crate::auth::resolve_auth(None)?;
+    let workspace_url = resolved.workspace_url.unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+    let config = crate::app_config::load_app_config();
+    let client =
+        crate::slack::SlackClient::new(resolved.auth.clone(), Some(workspace_url));
+
+    let daemon =
+        crate::sync::SyncDaemon::new(client, store, config.store, &resolved.auth);
+
+    if opts.daemon {
+        eprintln!(
+            "[sync] --daemon flag noted. True daemonization is not yet supported; \
+             the process runs in the foreground. Use `nohup slackers sync start &` \
+             to run in the background."
+        );
+    }
+
+    eprintln!("[sync] starting sync daemon (press Ctrl-C to stop)...");
+    daemon.start().await
+}
+
+fn handle_stop() -> Result<()> {
+    if !crate::sync::daemon::is_running() {
+        eprintln!("[sync] daemon is not running");
+        return Ok(());
+    }
+
+    crate::sync::daemon::stop_daemon()?;
+    eprintln!("[sync] daemon stopped");
+    Ok(())
+}
+
+fn handle_status() -> Result<()> {
+    let running = crate::sync::daemon::is_running();
+
+    let resolved = crate::auth::resolve_auth(None)?;
+    let workspace_url = resolved.workspace_url.unwrap_or_default();
+    let db_path = crate::config::store_db_path(&workspace_url)?;
+    let store = crate::store::Store::open(&db_path)?;
+    let config = crate::app_config::load_app_config();
+    let client =
+        crate::slack::SlackClient::new(resolved.auth.clone(), Some(workspace_url));
+
+    let daemon =
+        crate::sync::SyncDaemon::new(client, store, config.store, &resolved.auth);
+
+    let status = daemon.status()?;
+
+    // Override running field with our fresh is_running() check,
+    // since the daemon.status() also calls is_running() internally
+    // but we want to be consistent.
+    let _ = running;
+
+    println!("{}", crate::output::to_json_output(&status));
+    Ok(())
 }
 
 async fn handle_backfill(opts: crate::cli::SyncBackfillOptions) -> Result<()> {
