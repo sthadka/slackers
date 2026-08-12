@@ -1,8 +1,10 @@
+pub mod channels;
 pub mod files;
 pub mod messages;
 pub mod reactions;
 mod schema;
 pub mod subscriptions;
+pub mod users;
 
 use crate::error::Result;
 use rusqlite::Connection;
