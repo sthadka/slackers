@@ -9,8 +9,16 @@ use crate::slack::{
 };
 use crate::slack::user_cache::{collect_referenced_user_ids, resolve_users_by_id, to_referenced_users};
 use crate::slack::users::CompactSlackUser;
+use crate::store::Store;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+
+/// Try to open the local store if the `[store] enabled = true` setting is active.
+/// Returns `None` when the store is disabled or cannot be opened.
+fn try_open_store(workspace_url: Option<&str>) -> Option<Store> {
+    let workspace_url = workspace_url?;
+    crate::config::open_store_if_enabled(workspace_url).ok().flatten()
+}
 
 pub async fn handle_search(subcommand: SearchCommand) -> Result<()> {
     match subcommand {
@@ -40,6 +48,88 @@ fn build_name_map(users_by_id: &HashMap<String, CompactSlackUser>) -> HashMap<St
         .collect()
 }
 
+/// Check if we can serve a message search from the local store.
+/// Returns true when the search is message-only, has no advanced filters or date
+/// restrictions that the store cannot handle, and all requested channels (if any)
+/// are subscribed in the store.
+fn can_use_local_search(
+    kind: &SearchKind,
+    options: &crate::cli::SearchOptions,
+    store: &Store,
+) -> bool {
+    // Only message searches can use FTS5 (no file search support)
+    if *kind == SearchKind::Files {
+        return false;
+    }
+
+    // Advanced filters (has:link, has:emoji, from:me) are not supported by FTS5
+    if options.has_link || options.has_emoji || options.from_me {
+        return false;
+    }
+
+    // Date-range filters are not supported by FTS5
+    if options.after.is_some() || options.before.is_some() {
+        return false;
+    }
+
+    // User filter is not supported by FTS5
+    if options.user.is_some() {
+        return false;
+    }
+
+    // If channels are specified, all of them must be subscribed
+    if !options.channel.is_empty() {
+        // We need to resolve channel names to IDs, but we only have the store.
+        // For simplicity, check that all channels (by ID or name) can be found
+        // and are subscribed.
+        for ch in &options.channel {
+            let channel_id = if ch.starts_with('C') || ch.starts_with('G') {
+                Some(ch.clone())
+            } else {
+                let name = ch.trim_start_matches('#');
+                store
+                    .get_channel_by_name(name)
+                    .ok()
+                    .flatten()
+                    .map(|c| c.id)
+            };
+            match channel_id {
+                Some(id) => {
+                    if !store.is_subscribed(&id).unwrap_or(false) {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+    }
+
+    true
+}
+
+/// Convert FTS5 SearchResult items to the same JSON Value format used by
+/// the API search output (CompactSlackMessage-like objects with a `channel` field).
+fn fts_results_to_values(results: &[crate::store::fts::SearchResult]) -> Vec<Value> {
+    results
+        .iter()
+        .map(|r| {
+            let text = r.rendered.as_deref().or(r.text.as_deref()).unwrap_or("");
+            let mut obj = json!({
+                "ts": r.ts,
+                "text": text,
+                "channel": r.channel_id,
+            });
+            if let Some(ref uid) = r.user_id {
+                obj["user"] = json!(uid);
+            }
+            if let Some(ref tts) = r.thread_ts {
+                obj["thread_ts"] = json!(tts);
+            }
+            obj
+        })
+        .collect()
+}
+
 async fn handle_search_impl(
     query: &str,
     kind: SearchKind,
@@ -47,6 +137,85 @@ async fn handle_search_impl(
 ) -> Result<()> {
     // Resolve auth
     let auth_result = resolve_auth(options.workspace.as_deref())?;
+
+    // Try local store for message searches
+    let local_result = if kind == SearchKind::Messages || kind == SearchKind::All {
+        if let Some(store) = try_open_store(auth_result.workspace_url.as_deref()) {
+            if can_use_local_search(&kind, &options, &store) {
+                // Resolve channel filters to IDs for FTS5
+                let channel_id = if options.channel.len() == 1 {
+                    let ch = &options.channel[0];
+                    if ch.starts_with('C') || ch.starts_with('G') {
+                        Some(ch.clone())
+                    } else {
+                        let name = ch.trim_start_matches('#');
+                        store
+                            .get_channel_by_name(name)
+                            .ok()
+                            .flatten()
+                            .map(|c| c.id)
+                    }
+                } else {
+                    None
+                };
+
+                match store.search_messages(
+                    query,
+                    channel_id.as_deref(),
+                    options.limit,
+                ) {
+                    Ok(results) => Some(results),
+                    Err(_) => None, // Fall back to API on FTS5 errors
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Determine output format
+    let fmt = OutputFormat::from_str(options.format.as_str()).unwrap_or_default();
+
+    if let Some(fts_results) = local_result {
+        if kind == SearchKind::Messages {
+            // Pure message search served from local store
+            let msgs = fts_results_to_values(&fts_results);
+            let messages_value = json!(msgs);
+
+            let output = json!({
+                "messages": messages_value,
+                "source": "local",
+            });
+
+            match fmt {
+                OutputFormat::Json => println!("{}", to_json_output(&output)),
+                _ => {
+                    let headers = ["ts", "channel", "user", "text"];
+                    let rows: Vec<Vec<String>> = msgs
+                        .iter()
+                        .map(|m| {
+                            vec![
+                                m.get("ts").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                m.get("channel").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                m.get("user").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                m.get("text").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            ]
+                        })
+                        .collect();
+                    println!("{}", fmt.render_rows(&headers, &rows));
+                }
+            }
+            return Ok(());
+        }
+        // For SearchKind::All, we got local messages but still need API for files.
+        // Fall through to the API path but inject local messages.
+    }
+
+    // Fall back to (or combine with) API
     let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
 
     let content_type = match options.content_type {
@@ -125,9 +294,6 @@ async fn handle_search_impl(
         referenced_users_value = to_referenced_users(&user_ids, &users_by_id).map(|m| json!(m));
     }
     let messages_value = json!(msgs);
-
-    // Determine output format
-    let fmt = OutputFormat::from_str(options.format.as_str()).unwrap_or_default();
 
     // Build output
     let mut output = json!({

@@ -8,7 +8,15 @@ use crate::slack::{
     get_conversation_info, get_user, join_conversation, leave_conversation, list_conversations,
     SlackClient,
 };
+use crate::store::Store;
 use serde_json::{self, json};
+
+/// Try to open the local store if the `[store] enabled = true` setting is active.
+/// Returns `None` when the store is disabled or cannot be opened.
+fn try_open_store(workspace_url: Option<&str>) -> Option<Store> {
+    let workspace_url = workspace_url?;
+    crate::config::open_store_if_enabled(workspace_url).ok().flatten()
+}
 
 pub async fn handle_channel(subcommand: ChannelCommand) -> Result<()> {
     match subcommand {
@@ -57,10 +65,48 @@ async fn handle_channel_list(
     format: &str,
 ) -> Result<()> {
     let auth_result = resolve_auth(workspace)?;
-    let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
     let member_only = !all;
     let fmt = OutputFormat::from_str(format).unwrap_or_default();
+
+    // Try local store first
+    if let Some(store) = try_open_store(auth_result.workspace_url.as_deref()) {
+        if let Ok(store_channels) = store.list_channels() {
+            if !store_channels.is_empty() {
+                // Apply filters that the API normally handles
+                let mut channels: Vec<_> = store_channels
+                    .into_iter()
+                    .filter(|ch| {
+                        if exclude_archived && ch.is_archived == Some(true) {
+                            return false;
+                        }
+                        if member_only && ch.is_member != Some(true) {
+                            return false;
+                        }
+                        if let Some(ref type_filter) = types {
+                            let matches = type_filter.iter().any(|t| match t.as_str() {
+                                "public_channel" => ch.is_channel == Some(true) && ch.is_private != Some(true),
+                                "private_channel" => ch.is_private == Some(true),
+                                "im" => ch.is_im == Some(true),
+                                "mpim" => ch.is_mpim == Some(true),
+                                _ => false,
+                            });
+                            if !matches {
+                                return false;
+                            }
+                        }
+                        true
+                    })
+                    .take(limit as usize)
+                    .collect();
+
+                return render_channel_list(&fmt, &mut channels, resolve_users, auth_result).await;
+            }
+        }
+    }
+
+    // Fall back to API
+    let client = SlackClient::new(auth_result.auth.clone(), auth_result.workspace_url.clone());
     let streaming = fmt == OutputFormat::Json && !resolve_users;
 
     let mut stream_page = |page: &[crate::slack::channels::CompactChannel]| {
@@ -83,8 +129,18 @@ async fn handle_channel_list(
         return Ok(());
     }
 
+    render_channel_list(&fmt, &mut channels, resolve_users, auth_result).await
+}
+
+async fn render_channel_list(
+    fmt: &OutputFormat,
+    channels: &mut Vec<crate::slack::channels::CompactChannel>,
+    resolve_users: bool,
+    auth_result: crate::auth::ResolvedAuth,
+) -> Result<()> {
     if resolve_users {
-        for ch in &mut channels {
+        let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
+        for ch in channels.iter_mut() {
             if ch.is_im == Some(true) {
                 if let Some(ref uid) = ch.user.clone() {
                     if let Ok(u) = get_user(&client, uid).await {
@@ -128,6 +184,24 @@ async fn handle_channel_get(
 ) -> Result<()> {
     // Resolve auth
     let auth_result = resolve_auth(workspace)?;
+
+    // Try local store first
+    if let Some(store) = try_open_store(auth_result.workspace_url.as_deref()) {
+        let store_result = if channel.starts_with('C') || channel.starts_with('D') || channel.starts_with('G') {
+            store.get_channel_by_id(channel).ok().flatten()
+        } else {
+            // Try by name (strip leading # if present)
+            let name = channel.trim_start_matches('#');
+            store.get_channel_by_name(name).ok().flatten()
+        };
+        if let Some(channel_info) = store_result {
+            let output = json!(channel_info);
+            println!("{}", to_json_output(&output));
+            return Ok(());
+        }
+    }
+
+    // Fall back to API
     let client = SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
     // conversations.info ONLY accepts channel IDs, not names
