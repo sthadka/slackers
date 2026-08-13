@@ -851,6 +851,36 @@ pub fn all_tools() -> Vec<ToolDef> {
             }),
             is_write: false,
         },
+        ToolDef {
+            name: "store_query_threads",
+            description: "Query threads from the local store with participant counts and reply stats",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "channel": prop("Channel filter (#name, name, or ID)"),
+                    "user": prop("User ID filter"),
+                    "after": prop("Only threads after this time"),
+                    "before": prop("Only threads before this time"),
+                    "sort": prop("Sort order: replies, participants, duration"),
+                    "limit": int_prop("Max results (default 50)")
+                }
+            }),
+            is_write: false,
+        },
+        ToolDef {
+            name: "store_user_context",
+            description: "Get a user's activity context: recent messages, active channels, and reactions",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "user": prop("User ID (U...) or @handle"),
+                    "after": prop("Only activity after this time (e.g. 7d, 30d)"),
+                    "limit": int_prop("Max messages per section (default 20)")
+                },
+                "required": ["user"]
+            }),
+            is_write: false,
+        },
         // ---- Slash ----
         ToolDef {
             name: "slash_run",
@@ -1336,6 +1366,27 @@ pub fn tool_to_cli_args(name: &str, args: &Value) -> Option<Vec<String>> {
         "store_sync_status" => {
             cli.push("sync".into());
             cli.push("status".into());
+        }
+        "store_query_threads" => {
+            cli.push("query".into());
+            cli.push("threads".into());
+            if let Some(v) = str_val(args, "channel") { cli.push("--channel".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "user") { cli.push("--user".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "after") { cli.push("--after".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "before") { cli.push("--before".into()); cli.push(v); }
+            if let Some(v) = str_val(args, "sort") { cli.push("--sort".into()); cli.push(v); }
+            if let Some(v) = int_val(args, "limit") { cli.push("--limit".into()); cli.push(v.to_string()); }
+        }
+        "store_user_context" => {
+            cli.push("query".into());
+            cli.push("messages".into());
+            cli.push("--user".into()); cli.push(str_req(args, "user"));
+            if let Some(v) = str_val(args, "after") { cli.push("--after".into()); cli.push(v); }
+            if let Some(v) = int_val(args, "limit") {
+                cli.push("--limit".into()); cli.push(v.to_string());
+            } else {
+                cli.push("--limit".into()); cli.push("20".into());
+            }
         }
         _ => return None,
     }
