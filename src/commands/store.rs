@@ -546,11 +546,11 @@ async fn handle_store_sub_remove(opts: crate::cli::StoreSubRemoveOptions) -> Res
     let workspace_url = auth_result.workspace_url.clone().unwrap_or_default();
     let db_path = crate::config::store_db_path(&workspace_url)?;
     let store = crate::store::Store::open(&db_path)?;
-    let client = crate::slack::SlackClient::new(auth_result.auth, auth_result.workspace_url);
 
     let channel_input = &opts.channel;
-    let channel_id =
-        crate::slack::channels::resolve_channel_id(&client, channel_input).await?;
+
+    // Resolve channel locally — no need to hit the API for a remove operation
+    let channel_id = resolve_channel_locally(&store, channel_input)?;
 
     store.remove_subscription(&channel_id)?;
 
@@ -668,6 +668,36 @@ async fn handle_store_export(opts: crate::cli::StoreExportOptions) -> Result<()>
     }
 
     Ok(())
+}
+
+/// Resolve a channel input (name or ID) using only the local store.
+/// If it looks like a channel ID (starts with C/D/G), returns it directly.
+/// Otherwise, looks up the channel by name in the local store or subscriptions.
+fn resolve_channel_locally(store: &crate::store::Store, input: &str) -> Result<String> {
+    let name = input.strip_prefix('#').unwrap_or(input);
+
+    // If it looks like a channel ID, return it directly
+    if name.starts_with('C') || name.starts_with('D') || name.starts_with('G') {
+        return Ok(name.to_string());
+    }
+
+    // Try the channels table
+    if let Some(ch) = store.get_channel_by_name(name)? {
+        return Ok(ch.id);
+    }
+
+    // Try matching against subscription channel_name
+    let subs = store.list_subscriptions()?;
+    for sub in &subs {
+        if sub.channel_name.as_deref() == Some(name) {
+            return Ok(sub.channel_id.clone());
+        }
+    }
+
+    Err(crate::error::SlackersError::Store(format!(
+        "Channel '{}' not found in local store. Use the channel ID (C...) instead.",
+        input
+    )))
 }
 
 /// Fetch channel info from the API and upsert it into the store, ensuring
