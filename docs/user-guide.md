@@ -126,7 +126,19 @@ When you have multiple workspaces, most commands accept `--workspace <url>` to t
 
 ## Configuration
 
-Create `~/.config/slackers/config.toml` (Linux) or `~/Library/Application Support/slackers/config.toml` (macOS) to control `message history` behavior:
+Generate a default config file with all options documented:
+
+```bash
+slackers config init
+```
+
+This creates `~/.config/slackers/config.toml` (Linux) or `~/Library/Application Support/slackers/config.toml` (macOS). To see the path without creating it:
+
+```bash
+slackers config path
+```
+
+The config file controls history, store, and sync behavior:
 
 ```toml
 [history]
