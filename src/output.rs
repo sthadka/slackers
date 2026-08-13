@@ -6,6 +6,8 @@ use serde_json::Value;
 static PRETTY: AtomicBool = AtomicBool::new(false);
 static QUIET: AtomicBool = AtomicBool::new(false);
 static NO_PROGRESS: AtomicBool = AtomicBool::new(false);
+static LOCAL_ONLY: AtomicBool = AtomicBool::new(false);
+static REMOTE: AtomicBool = AtomicBool::new(false);
 
 pub fn set_pretty(val: bool) {
     PRETTY.store(val, Ordering::Relaxed);
@@ -29,6 +31,24 @@ pub fn set_no_progress(val: bool) {
 
 pub fn is_no_progress() -> bool {
     NO_PROGRESS.load(Ordering::Relaxed)
+}
+
+#[allow(dead_code)]
+pub fn set_local_only(val: bool) {
+    LOCAL_ONLY.store(val, Ordering::Relaxed);
+}
+
+#[allow(dead_code)]
+pub fn is_local_only() -> bool {
+    LOCAL_ONLY.load(Ordering::Relaxed)
+}
+
+pub fn set_remote(val: bool) {
+    REMOTE.store(val, Ordering::Relaxed);
+}
+
+pub fn is_remote() -> bool {
+    REMOTE.load(Ordering::Relaxed)
 }
 
 pub fn serialize_json(value: &Value) -> String {

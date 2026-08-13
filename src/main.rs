@@ -22,6 +22,8 @@ async fn main() {
     output::set_pretty(cli.pretty);
     output::set_quiet(cli.quiet);
     output::set_no_progress(cli.no_progress);
+    output::set_local_only(cli.local_only);
+    output::set_remote(cli.remote);
 
     if let Err(e) = commands::dispatch(cli.command, cli.read_only).await {
         let mut err_obj = serde_json::json!({

@@ -159,8 +159,8 @@ async fn handle_search_impl(
     // Resolve auth
     let auth_result = resolve_auth(options.workspace.as_deref())?;
 
-    // Try local store for message searches
-    let local_result = if kind == SearchKind::Messages || kind == SearchKind::All {
+    // Try local store for message searches (unless --remote is set)
+    let local_result = if !crate::output::is_remote() && (kind == SearchKind::Messages || kind == SearchKind::All) {
         if let Some(store) = try_open_store(auth_result.workspace_url.as_deref()) {
             if can_use_local_search(&kind, &options, &store) {
                 // When --all-channels is set, don't filter by channel

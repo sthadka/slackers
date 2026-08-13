@@ -123,6 +123,14 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_progress: bool,
 
+    /// Force all reads to use the local store exclusively (errors if data is unavailable)
+    #[arg(long, global = true)]
+    pub local_only: bool,
+
+    /// Force API calls, bypassing the local store
+    #[arg(long, global = true)]
+    pub remote: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }
