@@ -347,6 +347,10 @@ async fn handle_store_sub_add(opts: crate::cli::StoreSubAddOptions) -> Result<()
     let channel_input = &opts.channel;
     let channel_id =
         crate::slack::channels::resolve_channel_id(&client, channel_input).await?;
+
+    // Ensure the channel exists in the channels table (FK constraint)
+    ensure_channel_in_store(&client, &store, &channel_id).await?;
+
     let channel_name = channel_input
         .strip_prefix('#')
         .unwrap_or(channel_input)
@@ -411,6 +415,8 @@ async fn handle_pattern_subscribe(
     for ch in &channels {
         if let Some(name) = &ch.name {
             if glob.matches(name) {
+                // Ensure the channel exists in the channels table (FK constraint)
+                store.upsert_channel(ch)?;
                 store.add_subscription(
                     &ch.id,
                     Some(name),
@@ -470,6 +476,25 @@ async fn handle_dm_subscribe(
         .unwrap_or(user_id);
 
     let channel_name = format!("dm-{}", display_name);
+
+    // Ensure the DM channel exists in the channels table (FK constraint)
+    let dm_channel = crate::slack::channels::CompactChannel {
+        id: channel_id.clone(),
+        name: Some(channel_name.clone()),
+        user: Some(user_id.clone()),
+        user_name: None,
+        is_channel: Some(false),
+        is_private: Some(false),
+        is_im: Some(true),
+        is_mpim: Some(false),
+        is_member: Some(true),
+        is_archived: Some(false),
+        topic: None,
+        purpose: None,
+        num_members: None,
+        created: None,
+    };
+    store.upsert_channel(&dm_channel)?;
 
     store.add_subscription(
         &channel_id,
@@ -630,6 +655,22 @@ async fn handle_store_export(opts: crate::cli::StoreExportOptions) -> Result<()>
         print!("{}", output_str);
     }
 
+    Ok(())
+}
+
+/// Fetch channel info from the API and upsert it into the store, ensuring
+/// the channels table has a row for the given channel_id (needed for FK constraints).
+async fn ensure_channel_in_store(
+    client: &crate::slack::SlackClient,
+    store: &crate::store::Store,
+    channel_id: &str,
+) -> Result<()> {
+    if store.get_channel_by_id(channel_id)?.is_some() {
+        return Ok(());
+    }
+    let channel_info =
+        crate::slack::channels::get_conversation_info(client, channel_id, false).await?;
+    store.upsert_channel(&channel_info)?;
     Ok(())
 }
 
