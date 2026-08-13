@@ -145,6 +145,7 @@ pub async fn run_event_loop(
     sink: &mut SplitSink<WsStream, WsMessage>,
     stream: &mut SplitStream<WsStream>,
     store: &Store,
+    client: &SlackClient,
     subscribed_channels: &HashSet<String>,
     reconnect_url: &mut Option<String>,
 ) -> Result<bool> {
@@ -187,7 +188,7 @@ pub async fn run_event_loop(
                                     }
                                 }
 
-                                dispatch_event(&event, store);
+                                dispatch_event(&event, store, client).await;
                             }
                             Err(_) => {
                                 // Non-JSON text frame — ignore.
@@ -224,30 +225,49 @@ pub async fn run_event_loop(
 // ─── dispatch ───────────────────────────────────────────────────────────────
 
 /// Ensure the channel exists in the channels table so FK constraints pass.
-fn ensure_channel(store: &Store, channel_id: &str) {
-    if let Ok(None) = store.get_channel_by_id(channel_id) {
-        let stub = crate::slack::channels::CompactChannel {
-            id: channel_id.to_string(),
-            name: None,
-            user: None,
-            user_name: None,
-            is_channel: None,
-            is_private: None,
-            is_im: None,
-            is_mpim: None,
-            is_member: None,
-            is_archived: None,
-            topic: None,
-            purpose: None,
-            num_members: None,
-            created: None,
-        };
-        let _ = store.upsert_channel(&stub);
+/// Fetches full channel info from the API when possible.
+async fn ensure_channel(store: &Store, client: &SlackClient, channel_id: &str) {
+    if let Ok(Some(_)) = store.get_channel_by_id(channel_id) {
+        return;
     }
+
+    // Try to fetch full channel info from the API.
+    if let Ok(resp) = client
+        .api_call(
+            "conversations.info",
+            vec![("channel".to_string(), channel_id.to_string())],
+        )
+        .await
+    {
+        if let Some(channel_obj) = resp.get("channel") {
+            let compact = crate::slack::channels::to_compact_channel(channel_obj);
+            let _ = store.upsert_channel(&compact);
+            return;
+        }
+    }
+
+    // Fallback: insert a stub so FK constraints don't block message storage.
+    let stub = crate::slack::channels::CompactChannel {
+        id: channel_id.to_string(),
+        name: None,
+        user: None,
+        user_name: None,
+        is_channel: None,
+        is_private: None,
+        is_im: None,
+        is_mpim: None,
+        is_member: None,
+        is_archived: None,
+        topic: None,
+        purpose: None,
+        num_members: None,
+        created: None,
+    };
+    let _ = store.upsert_channel(&stub);
 }
 
 /// Route a parsed event to the appropriate `Store` write method.
-fn dispatch_event(event: &SlackEvent, store: &Store) {
+async fn dispatch_event(event: &SlackEvent, store: &Store, client: &SlackClient) {
     // All store calls return Result; log errors but do not abort the loop.
     let result: Result<()> = match event {
         SlackEvent::Message {
@@ -260,7 +280,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             files,
             reply_count,
         } => {
-            ensure_channel(store, channel);
+            ensure_channel(store, client, channel).await;
             let r = store.upsert_message(
                 channel,
                 ts,
@@ -291,7 +311,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             r
         }
         SlackEvent::MessageChanged { channel, message } => {
-            ensure_channel(store, channel);
+            ensure_channel(store, client, channel).await;
             store.mark_edited(
                 channel,
                 &message.ts,
@@ -303,7 +323,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             channel,
             deleted_ts,
         } => {
-            ensure_channel(store, channel);
+            ensure_channel(store, client, channel).await;
             store.soft_delete_message(channel, deleted_ts)
         }
         SlackEvent::ReactionAdded {
@@ -312,7 +332,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             channel,
             ts,
         } => {
-            ensure_channel(store, channel);
+            ensure_channel(store, client, channel).await;
             store.upsert_reaction(channel, ts, reaction, user)
         }
         SlackEvent::ReactionRemoved {
@@ -321,7 +341,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             channel,
             ts,
         } => {
-            ensure_channel(store, channel);
+            ensure_channel(store, client, channel).await;
             store.delete_reaction(channel, ts, reaction, user)
         }
         SlackEvent::ChannelCreated {
@@ -525,6 +545,7 @@ pub async fn run_with_reconnect(
                     &mut sink,
                     &mut stream,
                     store,
+                    client,
                     subscribed_channels,
                     &mut reconnect_url,
                 )
