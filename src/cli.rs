@@ -1894,6 +1894,10 @@ pub struct ReportReactionsOpts {
     /// Filter by channel ID
     #[arg(long)]
     pub channel: Option<String>,
+
+    /// Time period (e.g. "30d", "7d")
+    #[arg(long)]
+    pub period: Option<String>,
 }
 
 #[derive(Args, Debug)]

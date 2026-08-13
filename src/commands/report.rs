@@ -452,6 +452,12 @@ async fn report_reactions(
         param_values.push(Box::new(channel.clone()));
         idx += 1;
     }
+    if let Some(ref period) = opts.period {
+        let cutoff = period_to_cutoff(period)?;
+        where_clauses.push(format!("r.message_ts >= ?{}", idx));
+        param_values.push(Box::new(cutoff));
+        idx += 1;
+    }
 
     let where_sql = if where_clauses.is_empty() {
         String::new()
@@ -512,7 +518,7 @@ async fn report_reactions(
 
     let report = ReactionsReport {
         channel: opts.channel,
-        period: None,
+        period: opts.period,
         total_reactions,
         top_emoji,
         most_reacted_messages,
