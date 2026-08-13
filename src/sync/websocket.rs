@@ -223,6 +223,29 @@ pub async fn run_event_loop(
 
 // ─── dispatch ───────────────────────────────────────────────────────────────
 
+/// Ensure the channel exists in the channels table so FK constraints pass.
+fn ensure_channel(store: &Store, channel_id: &str) {
+    if let Ok(None) = store.get_channel_by_id(channel_id) {
+        let stub = crate::slack::channels::CompactChannel {
+            id: channel_id.to_string(),
+            name: None,
+            user: None,
+            user_name: None,
+            is_channel: None,
+            is_private: None,
+            is_im: None,
+            is_mpim: None,
+            is_member: None,
+            is_archived: None,
+            topic: None,
+            purpose: None,
+            num_members: None,
+            created: None,
+        };
+        let _ = store.upsert_channel(&stub);
+    }
+}
+
 /// Route a parsed event to the appropriate `Store` write method.
 fn dispatch_event(event: &SlackEvent, store: &Store) {
     // All store calls return Result; log errors but do not abort the loop.
@@ -237,6 +260,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             files,
             reply_count,
         } => {
+            ensure_channel(store, channel);
             let r = store.upsert_message(
                 channel,
                 ts,
@@ -267,6 +291,7 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
             r
         }
         SlackEvent::MessageChanged { channel, message } => {
+            ensure_channel(store, channel);
             store.mark_edited(
                 channel,
                 &message.ts,
@@ -277,19 +302,28 @@ fn dispatch_event(event: &SlackEvent, store: &Store) {
         SlackEvent::MessageDeleted {
             channel,
             deleted_ts,
-        } => store.soft_delete_message(channel, deleted_ts),
+        } => {
+            ensure_channel(store, channel);
+            store.soft_delete_message(channel, deleted_ts)
+        }
         SlackEvent::ReactionAdded {
             user,
             reaction,
             channel,
             ts,
-        } => store.upsert_reaction(channel, ts, reaction, user),
+        } => {
+            ensure_channel(store, channel);
+            store.upsert_reaction(channel, ts, reaction, user)
+        }
         SlackEvent::ReactionRemoved {
             user,
             reaction,
             channel,
             ts,
-        } => store.delete_reaction(channel, ts, reaction, user),
+        } => {
+            ensure_channel(store, channel);
+            store.delete_reaction(channel, ts, reaction, user)
+        }
         SlackEvent::ChannelCreated {
             id,
             name,
