@@ -27,9 +27,14 @@ A Slack CLI written in Rust. All output is compact JSON — pipe it to `jq` for 
 19. [Workflows](#workflows)
 20. [Slash Commands](#slash-commands)
 21. [MCP Server](#mcp-server)
-22. [Output Format](#output-format)
-23. [Error Handling](#error-handling)
-24. [Tips](#tips)
+22. [Local Store](#local-store)
+23. [Sync](#sync)
+24. [Query](#query)
+25. [Report](#report)
+26. [Watch](#watch)
+27. [Output Format](#output-format)
+28. [Error Handling](#error-handling)
+29. [Tips](#tips)
 
 ---
 
@@ -133,6 +138,20 @@ exclude_subtypes = ["channel_join", "channel_leave", "channel_topic", "channel_p
 
 # Drop messages from specific users by ID
 exclude_users = ["USLACKBOT"]
+
+[store]
+enabled = true               # enable the local SQLite store (default: false)
+sync_scope = "public"        # public | public+private | all | selected
+store_raw_json = false       # keep full Slack JSON payloads
+max_db_size_mb = 500         # warn/prune threshold, 0 = unlimited
+auto_gc = true               # run gc before sync
+
+[store.defaults]
+retention_days = 90          # default for new subscriptions
+sync_threads = true
+sync_members = false
+sync_files = false
+max_file_size_mb = 10
 ```
 
 **Cache files** (managed automatically, no need to edit):
@@ -151,6 +170,8 @@ These flags apply to all commands:
 | `--pretty` | Produce indented JSON instead of compact single-line JSON |
 | `--quiet` | Minimal JSON output for write operations (e.g. `{"ok":true}`) |
 | `--no-progress` | Suppress spinner and progress bar output on stderr |
+| `--local-only` | Force all reads to use the local store exclusively (errors if data is unavailable) |
+| `--remote` | Force API calls, bypassing the local store |
 
 ---
 
@@ -403,6 +424,9 @@ slackers search files "budget" --content-type image
 | `--resolve-users` | Resolve user IDs to display names |
 | `--format` | Output format (json/table/markdown/plain) |
 | `--workspace <url>` | Target a specific workspace |
+| `--highlight` | Highlight matched terms in FTS5 local search results |
+| `--all-channels` | Search all subscribed channels (local FTS5, ignore --channel filter) |
+| `--regex <pattern>` | Post-filter results with a regex pattern on the text field |
 
 **Example:** find all messages mentioning "incident" in #ops from January 2025:
 
@@ -810,6 +834,297 @@ The server exposes 45+ tools organized by category:
 | Workflows | `workflow_list`, `workflow_preview`, `workflow_get` | `workflow_run` |
 | Slash | — | `slash_run` |
 | Workspace | `workspace_info`, `emoji_list` | — |
+| Store | `store_search`, `store_query_messages`, `store_query_threads`, `store_channel_summary`, `store_user_context`, `store_sync_status` | — |
+
+---
+
+## Local Store
+
+slackers can maintain a local SQLite database of your Slack data for offline access, fast full-text search, and analytics. The database is stored at:
+
+- **macOS:** `~/Library/Application Support/slackers/store-{hash}.db`
+- **Linux:** `~/.local/share/slackers/store-{hash}.db`
+
+The `{hash}` suffix is derived from your workspace, so each workspace gets its own database.
+
+### Enable the store
+
+Set `enabled = true` in the `[store]` section of your `config.toml`:
+
+```toml
+[store]
+enabled = true
+```
+
+See the [Configuration](#configuration) section for the full set of store options.
+
+### Store info
+
+```bash
+# Show database stats (size, message count, subscriptions, last sync time)
+slackers store info
+```
+
+### Garbage collection
+
+```bash
+# Run retention cleanup and vacuum
+slackers store gc
+```
+
+This removes messages older than the per-subscription `retention_days` setting and runs SQLite VACUUM to reclaim disk space. Runs automatically before each sync when `auto_gc = true`.
+
+### Reset the store
+
+```bash
+# Drop and recreate all tables (destructive — requires confirmation)
+slackers store reset
+```
+
+You must type `yes` to confirm. Blocked by `--read-only`.
+
+### Subscriptions
+
+Subscriptions control which channels are synced to the local store. Each subscription can have its own retention and sync settings.
+
+```bash
+# Subscribe to a channel
+slackers store sub add "#engineering"
+
+# Subscribe with custom retention and options
+slackers store sub add "#general" --retention 30d --no-threads --with-files --with-members
+
+# Subscribe to a DM
+slackers store sub add --dm @alice
+
+# Subscribe to channels matching a glob pattern
+slackers store sub add --pattern "eng-*"
+
+# Unsubscribe from a channel
+slackers store sub remove "#engineering"
+
+# List all subscriptions with sync state
+slackers store sub list
+```
+
+### Export and import
+
+```bash
+# Export store data as JSON (default)
+slackers store export
+
+# Export a specific channel as CSV
+slackers store export --format csv --channel "#general" --output general.csv
+
+# Import previously exported data
+slackers store import --file export.json
+```
+
+---
+
+## Sync
+
+Sync populates the local store with data from the Slack API. Requires the store to be enabled.
+
+### Real-time sync
+
+```bash
+# Start real-time sync (foreground)
+slackers sync start
+
+# Start as a background daemon
+slackers sync start --daemon
+
+# Set polling interval in seconds (for bot tokens)
+slackers sync start --daemon --interval 60
+```
+
+Browser tokens (`xoxc-`) use WebSocket for real-time updates. Bot tokens (`xoxb-`) use polling at the configured interval.
+
+### Stop and status
+
+```bash
+# Stop the sync daemon
+slackers sync stop
+
+# Show sync state (running/stopped, last sync time, channels syncing)
+slackers sync status
+```
+
+### One-shot sync
+
+```bash
+# Backfill all subscribed channels via REST (full history catch-up)
+slackers sync backfill
+
+# Fetch only the latest messages since the last sync
+slackers sync once
+```
+
+---
+
+## Query
+
+Query the local store with structured filters. All query subcommands read from the local SQLite database and do not make Slack API calls.
+
+### Messages
+
+```bash
+# Recent messages from a user in a channel
+slackers query messages --user "@alice" --channel "#engineering" --after 7d --limit 50
+
+# Messages sorted by reply count
+slackers query messages --channel "#general" --sort replies --limit 20
+
+# Messages in a time range
+slackers query messages --after "2026-01-01" --before "2026-02-01"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--user <@name/id>` | Filter by message author |
+| `--channel <#name/id>` | Filter by channel |
+| `--after <relative or timestamp>` | Messages after this point (e.g. `7d`, `2026-01-01`) |
+| `--before <relative or timestamp>` | Messages before this point |
+| `--text <substring>` | Filter by text content |
+| `--sort <field>` | Sort by `timestamp` or `replies` |
+| `--limit <N>` | Max results |
+
+### Threads
+
+```bash
+# Longest threads in a channel over the past 30 days
+slackers query threads --channel "#engineering" --after 30d --sort duration --limit 10
+
+# Most active threads by reply count
+slackers query threads --sort replies --limit 20
+```
+
+| Flag | Description |
+|------|-------------|
+| `--user <@name/id>` | Filter by thread starter |
+| `--channel <#name/id>` | Filter by channel |
+| `--after <relative or timestamp>` | Threads after this point |
+| `--before <relative or timestamp>` | Threads before this point |
+| `--sort <field>` | Sort by `replies`, `participants`, or `duration` |
+| `--limit <N>` | Max results |
+
+### Reactions
+
+```bash
+# Most-used reactions in a channel
+slackers query reactions --channel "#general" --group-by emoji --limit 10
+
+# Reactions given by a specific user
+slackers query reactions --user "@alice" --group-by user
+```
+
+| Flag | Description |
+|------|-------------|
+| `--channel <#name/id>` | Filter by channel |
+| `--user <@name/id>` | Filter by user who reacted |
+| `--emoji <name>` | Filter by specific emoji (without colons) |
+| `--group-by <field>` | Group by `emoji` or `user` |
+| `--limit <N>` | Max results |
+
+### Files
+
+```bash
+# Largest files in a channel
+slackers query files --channel "#design" --sort size --limit 20
+
+# Search files by name or type
+slackers query files --text "report" --sort name
+```
+
+| Flag | Description |
+|------|-------------|
+| `--channel <#name/id>` | Filter by channel |
+| `--text <substring>` | Filter by file name or type |
+| `--sort <field>` | Sort by `size` or `name` |
+| `--limit <N>` | Max results |
+
+### Activity
+
+```bash
+# Activity summary for the past week
+slackers query activity --after 7d
+
+# Activity in a date range
+slackers query activity --after "2026-07-01" --before "2026-08-01" --limit 50
+```
+
+| Flag | Description |
+|------|-------------|
+| `--after <relative or timestamp>` | Activity after this point |
+| `--before <relative or timestamp>` | Activity before this point |
+| `--limit <N>` | Max results |
+
+---
+
+## Report
+
+Generate analytics reports from the local store. All reports require the store to be enabled and populated via sync.
+
+### Channel activity
+
+```bash
+# Activity report: messages/day, unique posters, thread ratio
+slackers report activity --channel "#engineering" --period 30d
+```
+
+### User activity
+
+```bash
+# User report: message count, channels active, threads participated
+slackers report user --user "@alice" --period 30d
+```
+
+### Thread analytics
+
+```bash
+# Thread report: total threads, longest, most-replied
+slackers report threads --channel "#engineering" --period 30d
+```
+
+### Reaction analytics
+
+```bash
+# Reaction report: total reactions, most-used emoji
+slackers report reactions --channel "#general"
+slackers report reactions --channel "#general" --period 7d
+```
+
+### Mention analytics
+
+```bash
+# Mention report: total mentions, who mentions whom
+slackers report mentions --user "@alice" --period 30d
+```
+
+---
+
+## Watch
+
+Stream new messages to stdout as they arrive. Requires the sync daemon to be running or the local store to be populated.
+
+```bash
+# Watch a single channel
+slackers watch "#general"
+
+# Watch multiple channels
+slackers watch "#general" "#engineering" "#ops"
+
+# Filter by user
+slackers watch "#general" --user "@alice"
+
+# Only messages containing links
+slackers watch "#engineering" --has-link
+
+# Output as JSON (default) or plain text
+slackers watch "#general" --format json
+slackers watch "#general" --format plain
+```
 
 ---
 
