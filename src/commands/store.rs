@@ -214,6 +214,18 @@ async fn handle_store_reset() -> Result<()> {
         "WARNING: This will delete ALL data in the store at {}",
         db_path.display()
     );
+    eprint!("Type 'yes' to confirm: ");
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).map_err(|e| {
+        crate::error::SlackersError::Store(format!("failed to read confirmation: {}", e))
+    })?;
+
+    if input.trim() != "yes" {
+        eprintln!("Aborted.");
+        return Ok(());
+    }
+
     eprintln!("Resetting store...");
 
     // Drop all tables via a raw connection, then re-open through Store to re-migrate
