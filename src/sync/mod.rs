@@ -4,7 +4,7 @@ pub mod events;
 pub mod poller;
 pub mod websocket;
 
-pub use backfill::{backfill_all, backfill_channel, incremental_sync, BackfillStats};
+pub use backfill::{backfill_all, backfill_channel, incremental_sync, resolve_sync_channels, BackfillStats};
 pub use daemon::{is_running, remove_pid_file, write_pid_file};
 
 use std::collections::HashSet;
@@ -77,17 +77,17 @@ impl SyncDaemon {
         // Write PID file.
         write_pid_file()?;
 
-        // Build the set of subscribed channel IDs.
-        let subscribed_channels: HashSet<String> = self
-            .store
-            .list_subscription_channel_ids()?
+        // Resolve channels based on sync_scope config.
+        let subs = backfill::resolve_sync_channels(&self.client, &self.store, &self.config).await?;
+        let subscribed_channels: HashSet<String> = subs
             .into_iter()
+            .map(|s| s.channel_id)
             .collect();
 
         if subscribed_channels.is_empty() {
             remove_pid_file()?;
             return Err(SlackersError::Other(
-                "no channel subscriptions found — use `slackers store sub add` first".into(),
+                "no channels to sync — check sync_scope in config or use `slackers store sub add`".into(),
             ));
         }
 

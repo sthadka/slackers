@@ -153,10 +153,20 @@ exclude_users = ["USLACKBOT"]
 
 [store]
 enabled = true               # enable the local SQLite store (default: false)
-sync_scope = "public"        # public | public+private | all | selected
 store_raw_json = false       # keep full Slack JSON payloads
 max_db_size_mb = 500         # warn/prune threshold, 0 = unlimited
 auto_gc = true               # run gc before sync
+
+# Which channels to sync (default: "subscribed")
+#   subscribed     — only channels added via `store sub add`
+#   selected       — only channels listed in `channels` below
+#   public         — auto-discover all public channels you belong to
+#   public_private — auto-discover public + private channels
+#   all            — auto-discover everything (public, private, DMs, MPIMs)
+sync_scope = "subscribed"
+
+# Channels to sync when sync_scope = "selected" (names or IDs)
+# channels = ["general", "engineering", "C0123456789"]
 
 [store.defaults]
 retention_days = 90          # default for new subscriptions
@@ -937,6 +947,31 @@ slackers store import --file export.json
 ## Sync
 
 Sync populates the local store with data from the Slack API. Requires the store to be enabled.
+
+### Sync scope
+
+The `sync_scope` setting in `config.toml` controls which channels are synced:
+
+| Scope | Channels synced |
+|-------|----------------|
+| `subscribed` (default) | Only channels added via `store sub add` |
+| `selected` | Only channels listed in `store.channels` in config.toml |
+| `public` | Auto-discovers all public channels you're a member of |
+| `public_private` | Auto-discovers public + private channels |
+| `all` | Auto-discovers everything (public, private, DMs, MPIMs) |
+
+**`subscribed`** gives you explicit control — add channels one at a time with custom retention and thread settings.
+
+**`selected`** is useful when you want a fixed channel list in config that doesn't change:
+
+```toml
+[store]
+enabled = true
+sync_scope = "selected"
+channels = ["general", "engineering", "incidents"]
+```
+
+**`public`**, **`public_private`**, and **`all`** auto-discover channels from the Slack API each time sync runs — new channels you join are picked up automatically.
 
 ### Real-time sync
 

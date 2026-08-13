@@ -18,8 +18,16 @@ const DEFAULT_CONFIG: &str = r#"# slackers configuration
 # Enable the local SQLite store (default: false)
 # enabled = false
 
-# Which channels to sync: public | public_private | all | selected
-# sync_scope = "public"
+# Which channels to sync (default: subscribed)
+#   subscribed    — only channels added via `store sub add`
+#   selected      — only channels listed in `channels` below
+#   public        — auto-discover all public channels you belong to
+#   public_private — auto-discover public + private channels
+#   all           — auto-discover everything (public, private, DMs, MPIMs)
+# sync_scope = "subscribed"
+
+# Channels to sync when sync_scope = "selected" (names or IDs)
+# channels = ["general", "engineering", "C0123456789"]
 
 # Keep full Slack JSON payloads in the messages table (default: false)
 # store_raw_json = false

@@ -169,7 +169,7 @@ pub async fn leave_conversation(client: &SlackClient, channel_id: &str) -> Resul
 }
 
 /// Convert a full Slack channel object to compact representation
-fn to_compact_channel(channel: &Value) -> CompactChannel {
+pub fn to_compact_channel(channel: &Value) -> CompactChannel {
     let id = channel
         .get("id")
         .and_then(|v| v.as_str())

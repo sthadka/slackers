@@ -28,6 +28,8 @@ pub struct StoreConfig {
     pub max_db_size_mb: Option<u32>,
     pub auto_gc: bool,
     pub defaults: StoreDefaults,
+    /// Channel names or IDs to sync when `sync_scope = "selected"`.
+    pub channels: Vec<String>,
 }
 
 impl Default for StoreConfig {
@@ -39,6 +41,7 @@ impl Default for StoreConfig {
             max_db_size_mb: None,
             auto_gc: true,
             defaults: StoreDefaults::default(),
+            channels: Vec::new(),
         }
     }
 }
@@ -68,11 +71,17 @@ impl Default for StoreDefaults {
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum SyncScope {
-    #[default]
-    Public,
-    PublicPrivate,
-    All,
+    /// Sync only channels listed in `store.channels` config.
     Selected,
+    /// Sync only channels added via `store sub add`.
+    #[default]
+    Subscribed,
+    /// Auto-discover and sync all public channels the user is a member of.
+    Public,
+    /// Auto-discover public + private channels.
+    PublicPrivate,
+    /// Auto-discover all conversations (public, private, DMs, MPIMs).
+    All,
 }
 
 #[derive(Deserialize)]

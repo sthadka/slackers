@@ -1,7 +1,8 @@
-use crate::app_config::StoreConfig;
-use crate::error::Result;
+use crate::app_config::{StoreConfig, SyncScope};
+use crate::error::{Result, SlackersError};
 use crate::slack::SlackClient;
 use crate::store::Store;
+use crate::store::subscriptions::Subscription;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
 use serde_json::Value;
@@ -249,16 +250,138 @@ pub async fn backfill_channel(
     Ok(stats)
 }
 
-/// For each subscribed channel, check sync state and run `backfill_channel`.
+/// Resolve which channels to sync based on `sync_scope`.
+///
+/// - `Selected`: uses the `store.channels` list from config.toml, resolving
+///   names to IDs via the API.
+/// - `Subscribed`: uses channels added via `store sub add`.
+/// - `Public` / `PublicPrivate` / `All`: auto-discovers channels from the API,
+///   upserting each into the store's channels table.
+pub async fn resolve_sync_channels(
+    client: &SlackClient,
+    store: &Store,
+    config: &StoreConfig,
+) -> Result<Vec<Subscription>> {
+    match config.sync_scope {
+        SyncScope::Subscribed => {
+            let subs = store.list_subscriptions()?;
+            if subs.is_empty() {
+                eprintln!("[sync] No channel subscriptions found. Use `slackers store sub add` first.");
+            }
+            Ok(subs)
+        }
+        SyncScope::Selected => {
+            if config.channels.is_empty() {
+                return Err(SlackersError::Store(
+                    "sync_scope = \"selected\" but no channels listed in [store] channels. \
+                     Add channels = [\"#general\", \"#engineering\"] to config.toml."
+                        .into(),
+                ));
+            }
+            let mut subs = Vec::new();
+            for ch in &config.channels {
+                let channel_id =
+                    crate::slack::channels::resolve_channel_id(client, ch).await?;
+                let channel_name = ch
+                    .strip_prefix('#')
+                    .unwrap_or(ch)
+                    .to_string();
+
+                // Ensure the channel exists in the channels table.
+                if store.get_channel_by_name(&channel_name)?.is_none() {
+                    let info = client
+                        .api_call(
+                            "conversations.info",
+                            vec![("channel".to_string(), channel_id.clone())],
+                        )
+                        .await?;
+                    if let Some(channel_obj) = info.get("channel") {
+                        let compact = crate::slack::channels::to_compact_channel(channel_obj);
+                        let _ = store.upsert_channel(&compact);
+                    }
+                }
+
+                // Auto-create a subscription row so sync_state tracking works.
+                let _ = store.add_subscription(
+                    &channel_id,
+                    Some(&channel_name),
+                    config.defaults.retention_days,
+                    config.defaults.sync_threads,
+                    config.defaults.sync_members,
+                );
+
+                subs.push(Subscription {
+                    channel_id,
+                    channel_name: Some(channel_name),
+                    subscribed_at: 0,
+                    retention_days: config.defaults.retention_days,
+                    sync_threads: config.defaults.sync_threads,
+                    sync_members: config.defaults.sync_members,
+                });
+            }
+            Ok(subs)
+        }
+        SyncScope::Public | SyncScope::PublicPrivate | SyncScope::All => {
+            let types = match config.sync_scope {
+                SyncScope::Public => vec!["public_channel".to_string()],
+                SyncScope::PublicPrivate => {
+                    vec!["public_channel".to_string(), "private_channel".to_string()]
+                }
+                SyncScope::All => vec![
+                    "public_channel".to_string(),
+                    "private_channel".to_string(),
+                    "im".to_string(),
+                    "mpim".to_string(),
+                ],
+                _ => unreachable!(),
+            };
+
+            eprintln!("[sync] Discovering channels for scope {:?}...", config.sync_scope);
+            let channels = crate::slack::channels::list_conversations(
+                client,
+                Some(types),
+                true,
+                None,
+                true,
+                None,
+            )
+            .await?;
+
+            let mut subs = Vec::new();
+            for ch in &channels {
+                let _ = store.upsert_channel(ch);
+                let _ = store.add_subscription(
+                    &ch.id,
+                    ch.name.as_deref(),
+                    config.defaults.retention_days,
+                    config.defaults.sync_threads,
+                    config.defaults.sync_members,
+                );
+                subs.push(Subscription {
+                    channel_id: ch.id.clone(),
+                    channel_name: ch.name.clone(),
+                    subscribed_at: 0,
+                    retention_days: config.defaults.retention_days,
+                    sync_threads: config.defaults.sync_threads,
+                    sync_members: config.defaults.sync_members,
+                });
+            }
+
+            eprintln!("[sync] Found {} channels", subs.len());
+            Ok(subs)
+        }
+    }
+}
+
+/// For each synced channel, check sync state and run `backfill_channel`.
 /// Resumes interrupted backfills using the stored cursor.
 pub async fn backfill_all(
     client: &SlackClient,
     store: &Store,
     config: &StoreConfig,
 ) -> Result<Vec<BackfillStats>> {
-    let subscriptions = store.list_subscriptions()?;
+    let subscriptions = resolve_sync_channels(client, store, config).await?;
     if subscriptions.is_empty() {
-        eprintln!("[sync] No channel subscriptions found. Use `slackers store sub add` first.");
         return Ok(Vec::new());
     }
 
@@ -293,16 +416,15 @@ pub async fn backfill_all(
     Ok(all_stats)
 }
 
-/// Incremental sync: for each subscribed channel, fetch messages newer than
+/// Incremental sync: for each synced channel, fetch messages newer than
 /// the `newest_ts` recorded in sync_state. Used by `sync once`.
 pub async fn incremental_sync(
     client: &SlackClient,
     store: &Store,
     config: &StoreConfig,
 ) -> Result<Vec<BackfillStats>> {
-    let subscriptions = store.list_subscriptions()?;
+    let subscriptions = resolve_sync_channels(client, store, config).await?;
     if subscriptions.is_empty() {
-        eprintln!("[sync] No channel subscriptions found. Use `slackers store sub add` first.");
         return Ok(Vec::new());
     }
 
