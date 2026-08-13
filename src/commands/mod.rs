@@ -231,7 +231,7 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
             }
         }
         Command::Store { subcommand } => {
-            store::handle_store(subcommand).await
+            store::handle_store(subcommand, read_only).await
         }
         Command::Watch(cmd) => {
             watch::handle_watch(cmd).await

@@ -35,11 +35,18 @@ struct GcResult {
     vacuumed: bool,
 }
 
-pub async fn handle_store(cmd: StoreCommand) -> Result<()> {
+pub async fn handle_store(cmd: StoreCommand, read_only: bool) -> Result<()> {
     match cmd {
         StoreCommand::Info => handle_store_info().await,
         StoreCommand::Gc => handle_store_gc().await,
-        StoreCommand::Reset => handle_store_reset().await,
+        StoreCommand::Reset => {
+            if read_only {
+                return Err(crate::error::SlackersError::Other(
+                    "Operation blocked: --read-only mode is enabled".to_string(),
+                ));
+            }
+            handle_store_reset().await
+        }
         StoreCommand::Sub { subcommand } => handle_store_sub(subcommand).await,
         StoreCommand::Export(opts) => handle_store_export(opts).await,
         StoreCommand::Import(opts) => handle_store_import(opts).await,
