@@ -67,19 +67,18 @@ CREATE INDEX idx_messages_thread ON messages(channel_id, thread_ts) WHERE thread
 CREATE INDEX idx_messages_user ON messages(user_id);
 CREATE INDEX idx_messages_time ON messages(ts);
 
--- Reactions
+-- Reactions (no FK to messages — events arrive out of order via WebSocket)
 CREATE TABLE reactions (
     channel_id   TEXT NOT NULL,
     message_ts   TEXT NOT NULL,
     emoji        TEXT NOT NULL,
     user_id      TEXT NOT NULL,
     synced_at    INTEGER NOT NULL,
-    PRIMARY KEY (channel_id, message_ts, emoji, user_id),
-    FOREIGN KEY (channel_id, message_ts) REFERENCES messages(channel_id, ts)
+    PRIMARY KEY (channel_id, message_ts, emoji, user_id)
 ) WITHOUT ROWID;
 CREATE INDEX idx_reactions_emoji ON reactions(emoji);
 
--- File attachments
+-- File attachments (no FK to messages — events arrive out of order via WebSocket)
 CREATE TABLE files (
     id                   TEXT PRIMARY KEY,
     channel_id           TEXT,
@@ -90,8 +89,7 @@ CREATE TABLE files (
     url_private          TEXT,
     url_private_download TEXT,
     local_path           TEXT,
-    synced_at            INTEGER NOT NULL,
-    FOREIGN KEY (channel_id, message_ts) REFERENCES messages(channel_id, ts)
+    synced_at            INTEGER NOT NULL
 );
 
 -- Channel membership

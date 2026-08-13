@@ -58,7 +58,42 @@ impl Store {
             conn.execute_batch(schema::SCHEMA_V1)?;
             conn.pragma_update(None, "user_version", 1)?;
         }
-        // Future: if version < 2 { ... }
+        if version < 2 {
+            // Drop FK constraints on reactions and files — WebSocket events
+            // arrive out of order so the referenced message may not exist yet.
+            conn.execute_batch(
+                "CREATE TABLE reactions_new (
+                    channel_id   TEXT NOT NULL,
+                    message_ts   TEXT NOT NULL,
+                    emoji        TEXT NOT NULL,
+                    user_id      TEXT NOT NULL,
+                    synced_at    INTEGER NOT NULL,
+                    PRIMARY KEY (channel_id, message_ts, emoji, user_id)
+                ) WITHOUT ROWID;
+                INSERT OR IGNORE INTO reactions_new SELECT * FROM reactions;
+                DROP TABLE reactions;
+                ALTER TABLE reactions_new RENAME TO reactions;
+                CREATE INDEX idx_reactions_emoji ON reactions(emoji);
+
+                CREATE TABLE files_new (
+                    id                   TEXT PRIMARY KEY,
+                    channel_id           TEXT,
+                    message_ts           TEXT,
+                    name                 TEXT,
+                    mimetype             TEXT,
+                    size_bytes           INTEGER,
+                    url_private          TEXT,
+                    url_private_download TEXT,
+                    local_path           TEXT,
+                    synced_at            INTEGER NOT NULL
+                );
+                INSERT OR IGNORE INTO files_new SELECT * FROM files;
+                DROP TABLE files;
+                ALTER TABLE files_new RENAME TO files;
+
+                PRAGMA user_version = 2;",
+            )?;
+        }
         Ok(())
     }
 
@@ -108,7 +143,7 @@ mod tests {
     #[test]
     fn test_store_open_sets_user_version() {
         let store = Store::open_in_memory().unwrap();
-        assert_eq!(store.schema_version().unwrap(), 1);
+        assert_eq!(store.schema_version().unwrap(), 2);
     }
 
     #[test]
@@ -204,13 +239,13 @@ mod tests {
 
         // Open again -- should not fail
         let store = Store::open(&path).unwrap();
-        assert_eq!(store.schema_version().unwrap(), 1);
+        assert_eq!(store.schema_version().unwrap(), 2);
     }
 
     #[test]
     fn test_store_in_memory() {
         let store = Store::open_in_memory().unwrap();
-        assert_eq!(store.schema_version().unwrap(), 1);
+        assert_eq!(store.schema_version().unwrap(), 2);
     }
 
     #[test]
