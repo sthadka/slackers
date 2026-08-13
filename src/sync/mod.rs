@@ -4,7 +4,7 @@ pub mod events;
 pub mod poller;
 pub mod websocket;
 
-pub use backfill::{backfill_all, backfill_channel, incremental_sync, resolve_sync_channels, BackfillStats};
+pub use backfill::{backfill_all, backfill_channel, incremental_sync, BackfillStats};
 pub use daemon::{is_running, remove_pid_file, write_pid_file};
 
 use std::collections::HashSet;

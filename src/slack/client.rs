@@ -84,6 +84,14 @@ impl SlackClient {
         self.workspace_url.as_deref()
     }
 
+    /// Return the xoxd cookie if using browser auth, for WebSocket connections.
+    pub fn browser_cookie(&self) -> Option<&str> {
+        match &self.auth {
+            WorkspaceAuth::Browser { xoxd_cookie, .. } => Some(xoxd_cookie.as_str()),
+            _ => None,
+        }
+    }
+
     pub fn new(auth: WorkspaceAuth, workspace_url: Option<String>) -> Self {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))

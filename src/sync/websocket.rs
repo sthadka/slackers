@@ -36,13 +36,55 @@ pub async fn connect_rtm(
     client: &SlackClient,
 ) -> Result<(SplitSink<WsStream, WsMessage>, SplitStream<WsStream>, String)> {
     let resp = client.api_call("rtm.connect", vec![]).await?;
+
+    if resp.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        let err_msg = resp
+            .get("error")
+            .and_then(|e| e.as_str())
+            .unwrap_or("unknown error");
+        return Err(SlackersError::Other(format!(
+            "rtm.connect failed: {}",
+            err_msg
+        )));
+    }
+
     let url = resp
         .get("url")
         .and_then(|u| u.as_str())
         .ok_or_else(|| SlackersError::Other("rtm.connect did not return a url".into()))?
         .to_string();
 
-    let (ws_stream, _response) = connect_async(&url)
+    eprintln!("[sync] rtm.connect OK, connecting to WebSocket...");
+
+    // Build a request with the cookie header — Slack's WSS endpoint
+    // requires the xoxd cookie for browser-auth connections.
+    let request = url
+        .parse::<tokio_tungstenite::tungstenite::http::Uri>()
+        .map_err(|e| SlackersError::Other(format!("invalid WSS URL: {}", e)))?;
+
+    let mut req_builder = tokio_tungstenite::tungstenite::http::Request::builder()
+        .uri(&url)
+        .header("Host", request.host().unwrap_or("wss-primary.slack.com"))
+        .header("Connection", "Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .header(
+            "Sec-WebSocket-Key",
+            tokio_tungstenite::tungstenite::handshake::client::generate_key(),
+        );
+
+    if let Some(cookie) = client.browser_cookie() {
+        req_builder = req_builder.header(
+            "Cookie",
+            format!("d={}", urlencoding::encode(cookie)),
+        );
+    }
+
+    let request = req_builder
+        .body(())
+        .map_err(|e| SlackersError::Other(format!("failed to build WS request: {}", e)))?;
+
+    let (ws_stream, _response) = connect_async(request)
         .await
         .map_err(|e| SlackersError::Other(format!("WebSocket connect failed: {}", e)))?;
 
