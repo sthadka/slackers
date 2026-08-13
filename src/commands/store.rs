@@ -100,8 +100,12 @@ async fn handle_store_info() -> Result<()> {
         .map(|m| m.len())
         .unwrap_or(0);
 
-    // Open a raw connection for read-only queries
-    let conn = rusqlite::Connection::open(&db_path)?;
+    // Open via Store::open to ensure schema migrations run on first use
+    let store = crate::store::Store::open(&db_path)?;
+    let conn = store.connection();
+    let conn = conn.lock().map_err(|e| {
+        crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
+    })?;
 
     let messages = count_table(&conn, "messages")?;
     let channels = count_table(&conn, "channels")?;

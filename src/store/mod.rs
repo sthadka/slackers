@@ -62,6 +62,11 @@ impl Store {
         Ok(())
     }
 
+    /// Get a reference to the inner connection mutex.
+    pub fn connection(&self) -> &Mutex<Connection> {
+        &self.conn
+    }
+
     /// Get the current schema version.
     #[allow(dead_code)]
     pub fn schema_version(&self) -> Result<u32> {
