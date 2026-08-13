@@ -87,9 +87,10 @@ pub fn stop_daemon() -> Result<()> {
 
 /// Check whether a process with the given PID exists.
 fn process_exists(pid: u32) -> bool {
-    // Use /proc filesystem to check process existence.
-    let proc_path = format!("/proc/{}", pid);
-    std::path::Path::new(&proc_path).exists()
+    // Use kill(pid, 0) which works on both Linux and macOS.
+    // Signal 0 doesn't send a signal but checks if the process exists.
+    let ret = unsafe { libc::kill(pid as libc::pid_t, 0) };
+    ret == 0
 }
 
 #[cfg(test)]
