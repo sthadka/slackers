@@ -53,11 +53,19 @@ pub async fn backfill_channel(
         .as_ref()
         .and_then(|s| s.cursor.clone());
 
-    // Compute retention boundary if configured.
-    let retention_boundary = config.defaults.retention_days.map(|days| {
-        let secs = chrono::Utc::now().timestamp() - (days as i64 * 86400);
-        format!("{}.000000", secs)
-    });
+    // Compute retention boundary: per-subscription setting overrides default.
+    // retention_days = 0 or None means no limit.
+    let sub_retention = store
+        .list_subscriptions()
+        .ok()
+        .and_then(|subs| subs.iter().find(|s| s.channel_id == channel_id).and_then(|s| s.retention_days));
+    let effective_retention = sub_retention.or(config.defaults.retention_days);
+    let retention_boundary = effective_retention
+        .filter(|&days| days > 0)
+        .map(|days| {
+            let secs = chrono::Utc::now().timestamp() - (days as i64 * 86400);
+            format!("{}.000000", secs)
+        });
 
     let channel_label = channel_id.to_string();
     let spinner = new_spinner(&format!("Backfilling {}...", channel_label));
