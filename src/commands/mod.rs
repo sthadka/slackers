@@ -2,6 +2,7 @@ mod auth;
 mod batch;
 mod canvas;
 mod channel;
+mod config;
 pub mod dm;
 pub mod export;
 pub mod file;
@@ -244,6 +245,9 @@ pub async fn dispatch(command: Command, read_only: bool) -> Result<()> {
         }
         Command::Report { subcommand } => {
             report::handle_report(subcommand).await
+        }
+        Command::Config { subcommand } => {
+            config::handle_config(subcommand).await
         }
         Command::Serve => {
             crate::mcp::run_server(read_only).await

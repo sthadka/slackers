@@ -100,6 +100,7 @@ OTHER
   later       Manage saved items (Later list)
   mention     List @mentions
   auth        Manage authentication
+  config      Manage configuration
   serve       Start MCP server over stdio
 
 GLOBAL FLAGS
@@ -270,8 +271,21 @@ pub enum Command {
         #[command(subcommand)]
         subcommand: AuthCommand,
     },
+    /// Manage configuration
+    Config {
+        #[command(subcommand)]
+        subcommand: ConfigCommand,
+    },
     /// Start MCP server over stdio
     Serve,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommand {
+    /// Create a default config.toml with all options documented
+    Init,
+    /// Show the path to the config file
+    Path,
 }
 
 // ============================================================================
