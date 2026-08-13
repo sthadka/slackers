@@ -7,6 +7,7 @@ use super::Store;
 
 /// A reaction stored in the local SQLite database.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct StoredReaction {
     pub channel_id: String,
     pub message_ts: String,
@@ -61,6 +62,7 @@ impl Store {
     }
 
     /// List all reactions on a specific message.
+    #[allow(dead_code)]
     pub fn list_reactions(
         &self,
         channel_id: &str,

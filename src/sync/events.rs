@@ -5,6 +5,7 @@ use serde_json::Value;
 /// Covers all event types referenced in the spec (local-store-sync-plan.md, §A.13).
 /// Events that do not match a known type are captured as `Unknown`.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum SlackEvent {
     /// A new message in a channel.
     Message {
@@ -117,6 +118,7 @@ pub enum SlackEvent {
 
 /// Inner struct for an edited message payload.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct EditedMessage {
     pub user: Option<String>,
     pub text: Option<String>,

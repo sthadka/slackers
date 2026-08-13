@@ -7,6 +7,7 @@ use super::Store;
 
 /// A file attachment stored in the local SQLite database.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct StoredFile {
     pub id: String,
     pub channel_id: Option<String>,
@@ -75,6 +76,7 @@ impl Store {
     }
 
     /// Retrieve a file by its ID.
+    #[allow(dead_code)]
     pub fn get_file(&self, id: &str) -> Result<Option<StoredFile>> {
         let conn = self.conn.lock().map_err(|e| {
             crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
@@ -104,6 +106,7 @@ impl Store {
     }
 
     /// List all files attached to a specific message.
+    #[allow(dead_code)]
     pub fn list_files_by_message(
         &self,
         channel_id: &str,

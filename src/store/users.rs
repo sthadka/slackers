@@ -151,6 +151,7 @@ impl Store {
     }
 
     /// Get multiple users by their Slack IDs.
+    #[allow(dead_code)]
     pub fn get_users_by_ids(&self, ids: &[String]) -> Result<Vec<CompactSlackUser>> {
         if ids.is_empty() {
             return Ok(Vec::new());

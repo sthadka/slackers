@@ -16,6 +16,7 @@ pub struct QueryFilters {
     pub sort: Option<String>,
     pub limit: u32,
     pub emoji: Option<String>,
+    #[allow(dead_code)]
     pub min_reactions: Option<u32>,
 }
 

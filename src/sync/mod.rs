@@ -5,7 +5,7 @@ pub mod poller;
 pub mod websocket;
 
 pub use backfill::{backfill_all, backfill_channel, incremental_sync, BackfillStats};
-pub use daemon::{is_running, remove_pid_file, stop_daemon, write_pid_file};
+pub use daemon::{is_running, remove_pid_file, write_pid_file};
 
 use std::collections::HashSet;
 

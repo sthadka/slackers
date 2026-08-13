@@ -192,6 +192,7 @@ impl Store {
     }
 
     /// Hard-delete a message (removes the row entirely). FTS triggers clean up the index.
+    #[allow(dead_code)]
     pub fn delete_message(&self, channel_id: &str, ts: &str) -> Result<()> {
         let conn = self.conn.lock().map_err(|e| {
             crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
@@ -235,6 +236,7 @@ impl Store {
     }
 
     /// Count non-deleted messages in a channel.
+    #[allow(dead_code)]
     pub fn message_count(&self, channel_id: &str) -> Result<u64> {
         let conn = self.conn.lock().map_err(|e| {
             crate::error::SlackersError::Store(format!("lock poisoned: {}", e))
