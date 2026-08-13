@@ -13,6 +13,32 @@ use crate::store::Store;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+/// Convert a YYYY-MM-DD date string to a Slack timestamp string for comparison.
+fn date_to_ts(date: &str) -> Option<String> {
+    let date = date.trim();
+    if date.len() == 10 && date.chars().nth(4) == Some('-') {
+        let parts: Vec<&str> = date.split('-').collect();
+        if parts.len() == 3 {
+            if let (Ok(y), Ok(m), Ok(d)) = (
+                parts[0].parse::<i64>(),
+                parts[1].parse::<u32>(),
+                parts[2].parse::<u32>(),
+            ) {
+                let days_since_epoch = (y - 1970) * 365 + ((y - 1969) / 4)
+                    - ((y - 1901) / 100) + ((y - 1601) / 400);
+                let month_days = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+                if let Some(&md) = month_days.get((m as usize).wrapping_sub(1)) {
+                    let leap = if m > 2 && y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 1 } else { 0 };
+                    let total_days = days_since_epoch + md as i64 + d as i64 - 1 + leap;
+                    let secs = total_days * 86400;
+                    return Some(format!("{}.000000", secs));
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Try to open the local store if the `[store] enabled = true` setting is active.
 /// Returns `None` when the store is disabled or cannot be opened.
 fn try_open_store(workspace_url: Option<&str>) -> Option<Store> {
@@ -64,16 +90,6 @@ fn can_use_local_search(
 
     // Advanced filters (has:link, has:emoji, from:me) are not supported by FTS5
     if options.has_link || options.has_emoji || options.from_me {
-        return false;
-    }
-
-    // Date-range filters are not supported by FTS5
-    if options.after.is_some() || options.before.is_some() {
-        return false;
-    }
-
-    // User filter is not supported by FTS5
-    if options.user.is_some() {
         return false;
     }
 
@@ -184,6 +200,23 @@ async fn handle_search_impl(
 
                 match search_result {
                     Ok(mut results) => {
+                        // Post-filter by user if set
+                        if let Some(ref user) = options.user {
+                            results.retain(|r| {
+                                r.user_id.as_deref() == Some(user.as_str())
+                            });
+                        }
+                        // Post-filter by date range if set
+                        if let Some(ref after) = options.after {
+                            if let Some(cutoff) = date_to_ts(after) {
+                                results.retain(|r| r.ts.as_str() >= cutoff.as_str());
+                            }
+                        }
+                        if let Some(ref before) = options.before {
+                            if let Some(cutoff) = date_to_ts(before) {
+                                results.retain(|r| r.ts.as_str() <= cutoff.as_str());
+                            }
+                        }
                         // Apply --regex post-filter if set
                         if let Some(ref pattern) = options.regex {
                             if let Ok(re) = regex::Regex::new(pattern) {
