@@ -68,6 +68,10 @@ pub async fn handle_query(cmd: QueryCommand) -> Result<()> {
         }
     };
 
-    println!("{}", crate::output::to_json_output(&results));
+    if results.is_empty() {
+        println!("[]");
+    } else {
+        println!("{}", crate::output::to_json_output(&results));
+    }
     Ok(())
 }

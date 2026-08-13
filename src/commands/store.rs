@@ -603,7 +603,11 @@ async fn handle_store_sub_list() -> Result<()> {
         });
     }
 
-    println!("{}", crate::output::to_json_output(&entries));
+    if entries.is_empty() {
+        println!("[]");
+    } else {
+        println!("{}", crate::output::to_json_output(&entries));
+    }
     Ok(())
 }
 
