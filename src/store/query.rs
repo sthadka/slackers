@@ -20,21 +20,29 @@ pub struct QueryFilters {
     pub min_reactions: Option<u32>,
 }
 
-/// Parse relative date strings like "7d", "30d" into Unix timestamps (as f64 seconds).
-/// Returns the epoch seconds for (now - Nd).
+/// Parse relative duration strings like "30s", "15m", "8h", "7d", "2w" into a
+/// Unix timestamp (as f64 seconds) representing (now - duration).
+///
+/// Supported unit suffixes (case-insensitive): `s` seconds, `m` minutes,
+/// `h` hours, `d` days, `w` weeks. Returns `None` for anything that is not a
+/// bare integer followed by one of these units (e.g. raw Slack timestamps like
+/// "1700000100.000000"), so callers can treat it as an absolute timestamp.
 fn parse_relative_date(s: &str) -> Option<f64> {
     let s = s.trim();
-    if s.ends_with('d') || s.ends_with('D') {
-        let num_str = &s[..s.len() - 1];
-        if let Ok(days) = num_str.parse::<u64>() {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs_f64();
-            return Some(now - (days as f64 * 86400.0));
-        }
-    }
-    None
+    let (num_str, unit_secs) = match s.chars().last()? {
+        's' | 'S' => (&s[..s.len() - 1], 1.0),
+        'm' | 'M' => (&s[..s.len() - 1], 60.0),
+        'h' | 'H' => (&s[..s.len() - 1], 3600.0),
+        'd' | 'D' => (&s[..s.len() - 1], 86400.0),
+        'w' | 'W' => (&s[..s.len() - 1], 604800.0),
+        _ => return None,
+    };
+    let n = num_str.parse::<u64>().ok()?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64();
+    Some(now - (n as f64 * unit_secs))
 }
 
 /// Resolve a time filter value: either a relative date ("7d") or a raw timestamp string.
@@ -641,9 +649,22 @@ mod tests {
             .as_secs_f64();
         let expected_approx = now - 7.0 * 86400.0;
         assert!((result.unwrap() - expected_approx).abs() < 1.0);
-
         assert!(parse_relative_date("30d").is_some());
+
+        // Sub-day units resolve to the correct offset from now.
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        for (input, secs) in [("8h", 8.0 * 3600.0), ("15m", 15.0 * 60.0), ("2w", 2.0 * 604800.0), ("30s", 30.0)] {
+            let got = parse_relative_date(input).unwrap_or_else(|| panic!("{input} should parse"));
+            assert!((got - (now - secs)).abs() < 1.0, "{input} offset wrong");
+        }
+
+        // Non-relative inputs return None so callers treat them as raw timestamps.
         assert!(parse_relative_date("notadate").is_none());
         assert!(parse_relative_date("").is_none());
+        assert!(parse_relative_date("1700000100.000000").is_none());
+        assert!(parse_relative_date("8x").is_none());
     }
 }
