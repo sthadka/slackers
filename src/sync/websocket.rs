@@ -521,8 +521,12 @@ fn delete_file(store: &Store, file_id: &str) -> Result<()> {
 
 /// Run the WebSocket event loop with automatic reconnection.
 ///
-/// On disconnect, applies exponential backoff (1 s, 2 s, 4 s, ... 60 s max).
-/// On `goodbye`, reconnects immediately.
+/// On disconnect or transport error (including Slack's routine RTM socket
+/// rotation ~every 15-30 min), applies exponential backoff (1 s, 2 s, 4 s,
+/// ... 60 s max) and reconnects. Backoff resets on each successful connect.
+/// On `goodbye`, reconnects immediately. This loop never returns on a
+/// recoverable network condition — only `connect_rtm`/`run_event_loop`
+/// results are handled here, and both disconnects and errors reconnect.
 /// On reconnect, checks for gaps in sync state per channel and logs warnings.
 pub async fn run_with_reconnect(
     client: &SlackClient,
@@ -541,7 +545,7 @@ pub async fn run_with_reconnect(
                 // Check for gaps after reconnect.
                 check_for_gaps(store, subscribed_channels);
 
-                let goodbye = run_event_loop(
+                match run_event_loop(
                     &mut sink,
                     &mut stream,
                     store,
@@ -549,12 +553,23 @@ pub async fn run_with_reconnect(
                     subscribed_channels,
                     &mut reconnect_url,
                 )
-                .await?;
-
-                if goodbye {
+                .await
+                {
                     // Server asked us to reconnect — no backoff.
-                    eprintln!("[sync] reconnecting immediately after goodbye");
-                    continue;
+                    Ok(true) => {
+                        eprintln!("[sync] reconnecting immediately after goodbye");
+                        continue;
+                    }
+                    // Normal disconnect — fall through to backoff + reconnect.
+                    Ok(false) => {}
+                    // Transport error (e.g. Slack's routine RTM socket
+                    // rotation, connection reset, or a failed keepalive ping).
+                    // This is expected periodically; recover instead of
+                    // exiting the daemon and triggering a supervisor restart
+                    // (which would re-run full-channel discovery).
+                    Err(e) => {
+                        eprintln!("[sync] event loop error: {e} — reconnecting");
+                    }
                 }
             }
             Err(e) => {
