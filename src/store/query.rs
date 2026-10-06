@@ -1,7 +1,9 @@
-use crate::error::Result;
+use crate::error::{Result, SlackersError};
 use crate::store::Store;
+use rusqlite::{types::ValueRef, Connection, OpenFlags};
 use serde::Serialize;
 use serde_json::Value;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Holds all filter parameters for query commands.
@@ -434,6 +436,177 @@ impl Store {
     }
 }
 
+// ============================================================================
+// Read-only arbitrary SQL executor
+// ============================================================================
+
+/// Produce a copy of `sql` with string/identifier literals and comments replaced
+/// by spaces, so structural scans (statement count, leading keyword, LIMIT
+/// detection) never trip over SQL embedded in string/identifier bodies.
+fn clean_sql(sql: &str) -> String {
+    let b = sql.as_bytes();
+    let mut out = String::with_capacity(sql.len());
+    let mut i = 0;
+    while i < b.len() {
+        let c = b[i];
+        if c == b'\'' || c == b'"' {
+            // String literal or quoted identifier; "" / '' escapes the quote.
+            let quote = c;
+            out.push(' ');
+            i += 1;
+            while i < b.len() {
+                if b[i] == quote {
+                    if i + 1 < b.len() && b[i + 1] == quote {
+                        i += 2;
+                        continue;
+                    }
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'-' && i + 1 < b.len() && b[i + 1] == b'-' {
+            while i < b.len() && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < b.len() && !(b[i] == b'*' && b[i + 1] == b'/') {
+                i += 1;
+            }
+            i = (i + 2).min(b.len());
+            out.push(' ');
+            continue;
+        }
+        out.push(c as char);
+        i += 1;
+    }
+    out
+}
+
+/// The first alphabetic keyword of the cleaned SQL, uppercased.
+fn leading_keyword(cleaned: &str) -> String {
+    cleaned
+        .trim_start()
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .next()
+        .unwrap_or("")
+        .to_ascii_uppercase()
+}
+
+/// True if the cleaned SQL contains a top-level `LIMIT` keyword (identifier parts
+/// like `my_limit` do not count).
+fn has_limit_clause(cleaned: &str) -> bool {
+    cleaned
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .any(|tok| tok.eq_ignore_ascii_case("limit"))
+}
+
+/// Reject anything that is not a single read-only `SELECT`/`WITH` statement.
+fn validate_readonly_sql(sql: &str) -> Result<()> {
+    let cleaned = clean_sql(sql);
+    if cleaned.trim().is_empty() {
+        return Err(SlackersError::Store("empty SQL statement".to_string()));
+    }
+    // Single statement only: a `;` may only be followed by whitespace/comments.
+    if let Some(pos) = cleaned.find(';') {
+        if !cleaned[pos + 1..].trim().is_empty() {
+            return Err(SlackersError::Store(
+                "only a single read-only statement is allowed (multiple statements detected)"
+                    .to_string(),
+            ));
+        }
+    }
+    let kw = leading_keyword(&cleaned);
+    if kw != "SELECT" && kw != "WITH" {
+        return Err(SlackersError::Store(format!(
+            "only read-only SELECT or WITH queries are allowed (got `{kw}`)"
+        )));
+    }
+    Ok(())
+}
+
+/// Convert a single SQLite cell to a JSON value by its dynamic type.
+fn value_ref_to_json(v: ValueRef<'_>) -> Value {
+    match v {
+        ValueRef::Null => Value::Null,
+        ValueRef::Integer(n) => Value::from(n),
+        ValueRef::Real(f) => serde_json::Number::from_f64(f)
+            .map(Value::Number)
+            .unwrap_or(Value::Null),
+        ValueRef::Text(t) => Value::String(String::from_utf8_lossy(t).into_owned()),
+        ValueRef::Blob(b) => Value::String(format!("<blob {} bytes>", b.len())),
+    }
+}
+
+/// Validate, cap, and execute a read-only query against `conn`, returning one
+/// JSON object per row keyed by column name.
+fn exec_readonly(conn: &Connection, sql: &str, limit: u32) -> Result<Vec<Value>> {
+    validate_readonly_sql(sql)?;
+    let cleaned = clean_sql(sql);
+
+    // Apply a safety cap only when the query has no LIMIT of its own. Wrapping in
+    // a subquery keeps CTEs intact.
+    let needs_cap = !has_limit_clause(&cleaned);
+    let final_sql = if needs_cap {
+        let inner = sql.trim().trim_end_matches(';').trim();
+        format!("SELECT * FROM (\n{inner}\n) LIMIT ?")
+    } else {
+        sql.to_string()
+    };
+
+    let mut stmt = conn
+        .prepare(&final_sql)
+        .map_err(|e| SlackersError::Store(format!("query failed to prepare: {e}")))?;
+    let col_count = stmt.column_count();
+    let col_names: Vec<String> = stmt
+        .column_names()
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    let mut rows = if needs_cap {
+        stmt.query(rusqlite::params![limit as i64])
+    } else {
+        stmt.query([])
+    }
+    .map_err(|e| SlackersError::Store(format!("query failed: {e}")))?;
+
+    let mut out = Vec::new();
+    while let Some(row) = rows
+        .next()
+        .map_err(|e| SlackersError::Store(format!("query failed: {e}")))?
+    {
+        let mut obj = serde_json::Map::with_capacity(col_count);
+        for (i, name) in col_names.iter().enumerate() {
+            let cell = row
+                .get_ref(i)
+                .map_err(|e| SlackersError::Store(format!("query failed: {e}")))?;
+            obj.insert(name.clone(), value_ref_to_json(cell));
+        }
+        out.push(Value::Object(obj));
+    }
+    Ok(out)
+}
+
+/// Run a read-only SQL query against a dedicated read-only connection to the
+/// store at `db_path`. Defense in depth: a `SQLITE_OPEN_READ_ONLY` connection
+/// with `query_only = ON` plus statement validation.
+pub fn query_sql(db_path: &Path, sql: &str, limit: u32) -> Result<Vec<Value>> {
+    let conn = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+    )
+    .map_err(|e| SlackersError::Store(format!("failed to open read-only connection: {e}")))?;
+    conn.pragma_update(None, "query_only", "ON")?;
+    conn.pragma_update(None, "trusted_schema", "OFF")?;
+    exec_readonly(&conn, sql, limit)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -666,5 +839,173 @@ mod tests {
         assert!(parse_relative_date("").is_none());
         assert!(parse_relative_date("1700000100.000000").is_none());
         assert!(parse_relative_date("8x").is_none());
+    }
+
+    fn setup_sql_store() -> Store {
+        let store = Store::open_in_memory().unwrap();
+        {
+            let conn = store.conn.lock().unwrap();
+            conn.execute(
+                "INSERT INTO channels (id, name, synced_at) VALUES (?1, ?2, ?3)",
+                params!["C001", "general", 1000],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO users (id, name, real_name, synced_at) VALUES (?1, ?2, ?3, ?4)",
+                params!["U001", "alice", "Alice A", 1000],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO users (id, name, real_name, synced_at) VALUES (?1, ?2, ?3, ?4)",
+                params!["U002", "bob", "Bob B", 1000],
+            )
+            .unwrap();
+            let rows: &[(&str, &str, Option<&str>, &str)] = &[
+                ("1790727339.341539", "U001", None, "scanner ran out of memory today"),
+                ("1790727400.000000", "U002", Some("1790727339.341539"), "reply about memory"),
+                ("1790727500.000000", "U001", Some("1790727339.341539"), "another reply"),
+                ("1790727600.000000", "U002", None, "unrelated chatter"),
+            ];
+            for (ts, user, thread, text) in rows {
+                conn.execute(
+                    "INSERT INTO messages (channel_id, ts, user_id, thread_ts, text, rendered, synced_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params!["C001", ts, user, thread, text, text, 1000i64],
+                )
+                .unwrap();
+            }
+        }
+        store
+    }
+
+    fn message_count(store: &Store) -> i64 {
+        let conn = store.conn.lock().unwrap();
+        conn.query_row("SELECT COUNT(*) FROM messages", [], |r| r.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn test_query_sql_join_resolves_names() {
+        let store = setup_sql_store();
+        let conn = store.conn.lock().unwrap();
+        let rows = exec_readonly(
+            &conn,
+            "SELECT m.ts, COALESCE(u.real_name, u.name) AS author, m.text
+             FROM messages m
+             LEFT JOIN users u ON u.id = m.user_id
+             WHERE m.channel_id = 'C001'
+             ORDER BY m.ts",
+            1000,
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0]["author"], "Alice A");
+        assert_eq!(rows[1]["author"], "Bob B");
+    }
+
+    #[test]
+    fn test_query_sql_thread_rollup() {
+        let store = setup_sql_store();
+        let conn = store.conn.lock().unwrap();
+        let rows = exec_readonly(
+            &conn,
+            "SELECT COUNT(*) AS msg_count, COUNT(DISTINCT m.user_id) AS participants
+             FROM messages m
+             WHERE m.channel_id = 'C001' AND m.is_deleted = 0
+               AND COALESCE(m.thread_ts, m.ts) = '1790727339.341539'
+             GROUP BY COALESCE(m.thread_ts, m.ts)",
+            1000,
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["msg_count"], 3);
+        assert_eq!(rows[0]["participants"], 2);
+    }
+
+    #[test]
+    fn test_query_sql_fts_match() {
+        let store = setup_sql_store();
+        let conn = store.conn.lock().unwrap();
+        let rows = exec_readonly(
+            &conn,
+            "SELECT m.ts, m.text
+             FROM messages_fts f
+             JOIN messages_rowid_map r ON r.rowid = f.rowid
+             JOIN messages m ON m.channel_id = r.channel_id AND m.ts = r.ts
+             WHERE messages_fts MATCH 'NEAR(scanner memory, 5)'",
+            1000,
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["ts"], "1790727339.341539");
+    }
+
+    #[test]
+    fn test_query_sql_rejects_writes() {
+        let store = setup_sql_store();
+        let before = message_count(&store);
+        let conn = store.conn.lock().unwrap();
+        for sql in [
+            "DELETE FROM messages",
+            "UPDATE messages SET text=''",
+            "INSERT INTO messages (channel_id, ts, synced_at) VALUES ('C9','1.0',1)",
+            "DROP TABLE messages",
+        ] {
+            assert!(exec_readonly(&conn, sql, 1000).is_err(), "should reject: {sql}");
+        }
+        drop(conn);
+        assert_eq!(message_count(&store), before);
+    }
+
+    #[test]
+    fn test_query_sql_rejects_multiple_statements() {
+        let store = setup_sql_store();
+        let conn = store.conn.lock().unwrap();
+        assert!(exec_readonly(&conn, "SELECT 1; SELECT 2", 1000).is_err());
+        // A trailing semicolon on a single statement is fine.
+        assert!(exec_readonly(&conn, "SELECT 1;", 1000).is_ok());
+    }
+
+    #[test]
+    fn test_query_sql_applies_limit_cap() {
+        let store = setup_sql_store();
+        let conn = store.conn.lock().unwrap();
+        let rows = exec_readonly(&conn, "SELECT ts FROM messages ORDER BY ts", 2).unwrap();
+        assert_eq!(rows.len(), 2);
+        // An explicit LIMIT is respected over the cap.
+        let rows = exec_readonly(&conn, "SELECT ts FROM messages ORDER BY ts LIMIT 3", 2).unwrap();
+        assert_eq!(rows.len(), 3);
+    }
+
+    #[test]
+    fn test_query_sql_readonly_connection_blocks_writes() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("ro.db");
+        let store = Store::open(&path).unwrap();
+        store
+            .conn
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO channels (id, name, synced_at) VALUES ('C001','general',1000)",
+                [],
+            )
+            .unwrap();
+
+        // Public path returns rows through a dedicated read-only connection.
+        let rows = query_sql(&path, "SELECT id FROM channels", 1000).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["id"], "C001");
+
+        // Defense in depth: a raw write on the read-only connection fails even if
+        // validation were bypassed.
+        let ro = Connection::open_with_flags(
+            &path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+        )
+        .unwrap();
+        ro.pragma_update(None, "query_only", "ON").unwrap();
+        assert!(ro.execute("DELETE FROM channels", []).is_err());
     }
 }

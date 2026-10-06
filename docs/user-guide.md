@@ -1107,6 +1107,33 @@ slackers query activity --after "2026-07-01" --before "2026-08-01" --limit 50
 | `--before <relative or timestamp>` | Activity before this point |
 | `--limit <N>` | Max results |
 
+### SQL (read-only)
+
+Run a single read-only `SELECT`/`WITH` statement directly against the local store and get JSON rows back. This moves joins, thread rollups, name resolution, grouping, and FTS5 into SQL instead of client code. Writes and DDL are always rejected (statement validation plus a dedicated read-only connection); if the query has no `LIMIT`, a safety cap (`--limit`, default 1000) is applied.
+
+```bash
+# Thread rollup with resolved author names, newest activity first
+slackers --local-only query sql "WITH win AS (SELECT '1790000000.000000' AS start_ts, '1790999999.999999' AS end_ts)
+SELECT m.channel_id, m.thread_ts, COUNT(*) AS msg_count,
+       COUNT(DISTINCT m.user_id) AS participants, MAX(m.ts) AS last_ts,
+       GROUP_CONCAT(DISTINCT COALESCE(u.real_name, u.name)) AS people
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+JOIN win ON m.ts BETWEEN win.start_ts AND win.end_ts
+WHERE m.is_deleted = 0 AND m.channel_id = 'C028JE84N59'
+GROUP BY m.channel_id, COALESCE(m.thread_ts, m.ts)
+ORDER BY last_ts DESC"
+
+# Print the store schema (DDL) and exit
+slackers query sql --schema
+```
+
+| Flag | Description |
+|------|-------------|
+| `<sql>` | A single read-only `SELECT` or `WITH` statement (required unless `--schema`) |
+| `--schema` | Print the store DDL as text and exit |
+| `--limit <N>` | Row cap applied when the query has no `LIMIT` (default 1000) |
+
 ---
 
 ## Report

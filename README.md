@@ -365,6 +365,20 @@ slackers mention list --username alice        # Someone else's
 slackers export channel --channel "#general" --format csv --output general.csv
 ```
 
+### Query (local store)
+
+```bash
+slackers query messages --channel C... --after 7d   # Structured message query
+slackers query threads --channel C... --sort replies # Thread rollups
+slackers query reactions --group-by emoji            # Reaction stats
+
+# Read-only arbitrary SQL (SELECT/WITH) over the local SQLite store
+slackers --local-only query sql "SELECT COALESCE(u.real_name, u.name) AS author, m.text \
+  FROM messages m LEFT JOIN users u ON u.id = m.user_id \
+  WHERE m.channel_id = 'C0123ABC' ORDER BY m.ts LIMIT 20"
+slackers query sql --schema                           # Print the store DDL and exit
+```
+
 ## Output Format
 
 All commands output compact JSON by default. Use `--pretty` for indented JSON.

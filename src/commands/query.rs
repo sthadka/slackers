@@ -18,6 +18,14 @@ fn resolve_channel_filter(store: &crate::store::Store, input: &str) -> String {
 }
 
 pub async fn handle_query(cmd: QueryCommand) -> Result<()> {
+    // `--schema` prints the DDL without needing auth or an existing store.
+    if let QueryCommand::Sql(opts) = &cmd {
+        if opts.schema {
+            print!("{}", crate::store::schema::SCHEMA_V1);
+            return Ok(());
+        }
+    }
+
     let resolved = crate::auth::resolve_auth(None)?;
     let workspace_url = resolved.workspace_url.unwrap_or_default();
     let db_path = crate::config::store_db_path(&workspace_url)?;
@@ -80,6 +88,10 @@ pub async fn handle_query(cmd: QueryCommand) -> Result<()> {
                 ..Default::default()
             };
             store.query_activity(&filters)?
+        }
+        QueryCommand::Sql(opts) => {
+            let sql = opts.sql.clone().unwrap_or_default();
+            crate::store::query::query_sql(&db_path, &sql, opts.limit)?
         }
     };
 

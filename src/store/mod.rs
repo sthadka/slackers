@@ -4,7 +4,7 @@ pub mod fts;
 pub mod messages;
 pub mod query;
 pub mod reactions;
-mod schema;
+pub mod schema;
 pub mod subscriptions;
 pub mod users;
 

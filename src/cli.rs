@@ -1731,6 +1731,9 @@ pub enum QueryCommand {
 
     /// Query message activity over time
     Activity(QueryActivityOpts),
+
+    /// Run a read-only SQL query (SELECT/WITH) against the local store
+    Sql(QuerySqlOpts),
 }
 
 #[derive(Args, Debug)]
@@ -1853,6 +1856,21 @@ pub struct QueryActivityOpts {
 
     /// Max results (default 50)
     #[arg(long, default_value = "50")]
+    pub limit: u32,
+}
+
+#[derive(Args, Debug)]
+pub struct QuerySqlOpts {
+    /// The SQL to run. Must be a single read-only SELECT or WITH statement.
+    #[arg(required_unless_present = "schema")]
+    pub sql: Option<String>,
+
+    /// Print the store schema (DDL) as text and exit.
+    #[arg(long)]
+    pub schema: bool,
+
+    /// Max rows to return (safety cap; applied if the query has no LIMIT).
+    #[arg(long, default_value = "1000")]
     pub limit: u32,
 }
 
