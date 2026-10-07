@@ -1008,6 +1008,14 @@ slackers sync backfill
 slackers sync once
 ```
 
+Every sync (`backfill`, `once`, and the real-time poller) also refreshes the
+local `users` table — bots included, with a 7-day TTL — for everyone
+referenced by the messages it stores. A `users.list`/`users.info` failure is
+logged and skipped; message sync still succeeds. As a result, `query sql` joins
+such as `LEFT JOIN users u ON u.id = m.user_id` resolve author names, and
+`messages.rendered` shows `@Name` instead of `<@Uxxx>`, without a separate
+`slackers user list` call.
+
 ---
 
 ## Query

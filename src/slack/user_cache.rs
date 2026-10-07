@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 const CACHE_VERSION: u32 = 1;
-const USER_TTL_MS: u64 = 24 * 60 * 60 * 1000;
-const USER_TTL_SECS: i64 = 24 * 60 * 60;
+const USER_TTL_MS: u64 = 7 * 24 * 60 * 60 * 1000;
+const USER_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
 static USER_ID_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^[UW][A-Z0-9]{8,}$").unwrap());
@@ -105,7 +105,26 @@ pub async fn resolve_users_by_id(
     resolve_users_via_json_cache(client, workspace_url, &unique_ids, force_refresh).await
 }
 
-/// Store-backed user resolution with 24-hour TTL.
+/// Resolve `user_ids` using the local store as cache (7-day TTL), fetching any
+/// missing/stale users via `users.info` and upserting them into the store.
+///
+/// Used by the sync path to keep the `users` table populated for everyone who
+/// appears in synced messages. Degrades gracefully: ids that cannot be fetched
+/// (rate limit, missing scope) are simply absent from the returned map and the
+/// store is left unchanged for them — this never fails message sync.
+pub async fn resolve_users_into_store(
+    client: &SlackClient,
+    store: &crate::store::Store,
+    user_ids: &[String],
+) -> HashMap<String, CompactSlackUser> {
+    let unique_ids = dedup_user_ids(user_ids);
+    if unique_ids.is_empty() {
+        return HashMap::new();
+    }
+    resolve_users_via_store(client, store, &unique_ids, false).await
+}
+
+/// Store-backed user resolution with a 7-day TTL.
 async fn resolve_users_via_store(
     client: &SlackClient,
     store: &crate::store::Store,
@@ -409,7 +428,7 @@ mod tests {
 
     #[test]
     fn test_prune_expired() {
-        let now = 100_000_000;
+        let now = 10_000_000_000;
         let mut file = UserCacheFile {
             version: CACHE_VERSION,
             entries: HashMap::new(),

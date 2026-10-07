@@ -750,7 +750,7 @@ pub struct MessageGetOptions {
     #[arg(long)]
     pub resolve_users: bool,
 
-    /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
+    /// Force refresh user cache (ignore 7-day TTL, re-fetch from API)
     #[arg(long)]
     pub refresh_users: bool,
 }
@@ -821,7 +821,7 @@ pub struct MessageListOptions {
     #[arg(long)]
     pub resolve_users: bool,
 
-    /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
+    /// Force refresh user cache (ignore 7-day TTL, re-fetch from API)
     #[arg(long)]
     pub refresh_users: bool,
 }
@@ -972,7 +972,7 @@ pub struct SearchOptions {
     #[arg(long)]
     pub resolve_users: bool,
 
-    /// Force refresh user cache (ignore 24h TTL, re-fetch from API)
+    /// Force refresh user cache (ignore 7-day TTL, re-fetch from API)
     #[arg(long)]
     pub refresh_users: bool,
 

@@ -379,6 +379,11 @@ slackers --local-only query sql "SELECT COALESCE(u.real_name, u.name) AS author,
 slackers query sql --schema                           # Print the store DDL and exit
 ```
 
+`sync` keeps the local `users` table refreshed (7-day TTL, bots included) for
+everyone who appears in synced messages, so the `LEFT JOIN users` above resolves
+author names and `messages.rendered` shows `@Name` instead of `<@Uxxx>` — no
+separate `user list` call needed.
+
 ## Output Format
 
 All commands output compact JSON by default. Use `--pretty` for indented JSON.

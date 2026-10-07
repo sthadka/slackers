@@ -1,5 +1,7 @@
 use crate::app_config::{StoreConfig, SyncScope};
 use crate::error::{Result, SlackersError};
+use crate::render::mrkdwn_to_markdown_with_users;
+use crate::slack::user_cache::{collect_referenced_user_ids, resolve_users_into_store};
 use crate::slack::SlackClient;
 use crate::store::Store;
 use crate::store::subscriptions::Subscription;
@@ -101,6 +103,11 @@ pub async fn backfill_channel(
 
         stats.pages_fetched += 1;
 
+        // Populate / refresh the local `users` table for everyone referenced by
+        // this page so `query sql` joins resolve names. Never fails the sync.
+        let user_map =
+            resolve_users_into_store(client, store, &collect_referenced_user_ids(&messages)).await;
+
         for msg in &messages {
             let ts = msg.get("ts").and_then(|v| v.as_str()).unwrap_or("");
             if ts.is_empty() {
@@ -166,6 +173,7 @@ pub async fn backfill_channel(
             } else {
                 None
             };
+            let rendered = text.map(|t| mrkdwn_to_markdown_with_users(t, &user_map));
 
             store.upsert_message(
                 channel_id,
@@ -173,7 +181,7 @@ pub async fn backfill_channel(
                 user_id,
                 thread_ts,
                 text,
-                None, // rendered — raw backfill does not render
+                rendered.as_deref(),
                 subtype,
                 reply_count,
                 raw_json.as_deref(),
@@ -493,6 +501,11 @@ pub async fn incremental_sync(
 
             stats.pages_fetched += 1;
 
+            // Refresh the `users` table for everyone referenced by this page.
+            let user_map =
+                resolve_users_into_store(client, store, &collect_referenced_user_ids(&messages))
+                    .await;
+
             for msg in &messages {
                 let ts = msg.get("ts").and_then(|v| v.as_str()).unwrap_or("");
                 if ts.is_empty() {
@@ -529,6 +542,7 @@ pub async fn incremental_sync(
                 } else {
                     None
                 };
+                let rendered = text.map(|t| mrkdwn_to_markdown_with_users(t, &user_map));
 
                 store.upsert_message(
                     &sub.channel_id,
@@ -536,7 +550,7 @@ pub async fn incremental_sync(
                     user_id,
                     thread_ts,
                     text,
-                    None,
+                    rendered.as_deref(),
                     subtype,
                     reply_count,
                     raw_json.as_deref(),
@@ -654,6 +668,10 @@ async fn fetch_and_store_thread(
             .map(|arr| arr.to_vec())
             .unwrap_or_default();
 
+        // Refresh the `users` table for everyone referenced by this thread page.
+        let user_map =
+            resolve_users_into_store(client, store, &collect_referenced_user_ids(&messages)).await;
+
         for msg in &messages {
             let ts = msg.get("ts").and_then(|v| v.as_str()).unwrap_or("");
             if ts.is_empty() || ts == thread_ts {
@@ -675,6 +693,7 @@ async fn fetch_and_store_thread(
             } else {
                 None
             };
+            let rendered = text.map(|t| mrkdwn_to_markdown_with_users(t, &user_map));
 
             store.upsert_message(
                 channel_id,
@@ -682,7 +701,7 @@ async fn fetch_and_store_thread(
                 user_id,
                 msg_thread_ts,
                 text,
-                None,
+                rendered.as_deref(),
                 subtype,
                 reply_count,
                 raw_json.as_deref(),
@@ -771,5 +790,78 @@ mod tests {
         };
         assert_eq!(stats.messages_added, 0);
         assert_eq!(stats.pages_fetched, 0);
+    }
+
+    use crate::slack::users::CompactSlackUser;
+
+    fn mk_user(id: &str, real_name: Option<&str>, name: Option<&str>) -> CompactSlackUser {
+        CompactSlackUser {
+            id: id.to_string(),
+            name: name.map(|s| s.to_string()),
+            real_name: real_name.map(|s| s.to_string()),
+            display_name: None,
+            email: None,
+            title: None,
+            tz: None,
+            is_bot: None,
+            deleted: None,
+        }
+    }
+
+    const ORDERED_QUERY: &str = "SELECT m.ts, COALESCE(u.real_name, u.name) AS author, m.text, m.rendered \
+        FROM messages m \
+        LEFT JOIN users u ON u.id = m.user_id \
+        WHERE m.channel_id = 'C001' AND COALESCE(m.thread_ts, m.ts) = '100.000000' AND m.is_deleted = 0 \
+        ORDER BY m.ts";
+
+    #[test]
+    fn test_rollup_join_resolves_author_names() {
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("rollup.db");
+        let store = Store::open(&path).unwrap();
+
+        // Users as the refresh step would have upserted them.
+        store
+            .upsert_users(&[
+                mk_user("U001", Some("Alice Example"), Some("alice")),
+                mk_user("U002", None, Some("bob")),
+            ])
+            .unwrap();
+
+        // Thread root + reply; root mentions U002 and `rendered` carries @bob.
+        store
+            .upsert_message("C001", "100.000000", Some("U001"), None, Some("hi <@U002>"), Some("hi @bob"), None, 1, None)
+            .unwrap();
+        store
+            .upsert_message("C001", "101.000000", Some("U002"), Some("100.000000"), Some("yo"), Some("yo"), None, 0, None)
+            .unwrap();
+
+        let rows = crate::store::query::query_sql(&path, ORDERED_QUERY, 1000).unwrap();
+        assert_eq!(rows.len(), 2);
+        // real_name wins; name is the fallback.
+        assert_eq!(rows[0]["author"], "Alice Example");
+        assert_eq!(rows[1]["author"], "bob");
+        // rendered mention resolved to a name, not a raw id.
+        assert_eq!(rows[0]["rendered"], "hi @bob");
+    }
+
+    #[test]
+    fn test_missing_user_does_not_break_message_query() {
+        // Degrade: if the users fetch failed, authors are simply unresolved — the
+        // message itself is still stored and returned by the LEFT JOIN.
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("degrade.db");
+        let store = Store::open(&path).unwrap();
+
+        store
+            .upsert_message("C001", "100.000000", Some("U999"), None, Some("orphan"), Some("orphan"), None, 0, None)
+            .unwrap();
+
+        let rows = crate::store::query::query_sql(&path, ORDERED_QUERY, 1000).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0]["author"].is_null());
+        assert_eq!(rows[0]["text"], "orphan");
     }
 }
